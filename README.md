@@ -419,7 +419,7 @@ device, per computer. Settings says so, in red, next to the toggle.
 | PATCH | `/api/jobs/{id}/sections` | Save waveform section markers for a job |
 | GET | `/api/jobs/{id}/stems/{name}.wav` | Stream a single stem WAV file |
 | GET | `/api/jobs/{id}/stems/{name}.mp3` | Transcode and stream a stem as MP3 |
-| GET | `/api/jobs/{id}/video.mp4` | Mux the current mix with the source video (MP4 upload or YouTube) into an MP4 |
+| GET | `/api/jobs/{id}/video.mp4` | Mux the current mix with the source video (MP4 upload or YouTube) into an MP4. Audio is AAC at 192k; on macOS, Apple's AudioToolbox encoder (`aac_at`) is used when the ffmpeg build carries it, ffmpeg's native `aac` otherwise |
 | DELETE | `/api/jobs/{id}` | Remove job dir from disk (terminal jobs only) |
 
 ---
