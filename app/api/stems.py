@@ -92,10 +92,11 @@ def _aac_encoder() -> str:
     """The AAC encoder the MP4 video export encodes with.
 
     On macOS, prefer Apple's AudioToolbox encoder (aac_at) when the ffmpeg
-    build carries it: it runs through the OS's tuned encoder rather than
-    ffmpeg's native one, which is both faster and audibly better at the same
-    192k bitrate. Everywhere else -- and on macOS builds without it -- the
-    native "aac" encoder, exactly as before.
+    build carries it: public listening tests consistently rank it above
+    ffmpeg's native encoder at the same 192k bitrate. A quality win, not a
+    speed one -- measured wall-clock is a wash (both encode a full song in
+    seconds; aac_at uses ~30% less CPU doing it). Everywhere else -- and on
+    macOS builds without it -- the native "aac" encoder, exactly as before.
 
     Probing `ffmpeg -encoders` rather than assuming: the binary in play may
     be the bundled build or whatever is on PATH (see ffmpeg_executable), and
