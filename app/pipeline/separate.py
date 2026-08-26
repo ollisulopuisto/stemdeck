@@ -104,6 +104,29 @@ def _get_worker(device: str) -> subprocess.Popen:
     return proc
 
 
+def prewarm(device: str | None = None) -> None:
+    """Spawn the persistent demucs worker before the separate stage needs it,
+    so its startup cost overlaps the download/prepare stages instead of
+    serializing after them.
+
+    A freshly spawned worker pays interpreter start + torch import + model
+    load -- and on the first GPU dispatch, kernel/shader compilation --
+    before the first progress line (#288/#309). All of that happens in the
+    child after Popen returns, so calling this at the top of the pipeline
+    costs the parent nothing and lets the worker warm up while yt-dlp or
+    ffmpeg is doing the source work. separate() then reuses the warm worker
+    through the same _get_worker path, or respawns if the device setting
+    changed in between -- exactly the reuse rules it already has.
+
+    Best-effort by design: a spawn problem here is not this stage's to
+    report. The real dispatch owns error handling (and the CPU fallback),
+    and it will hit the same problem with a job to attach it to."""
+    try:
+        _get_worker(device or get_demucs_device())
+    except Exception:
+        logger.debug("demucs worker prewarm failed; separate() will respawn", exc_info=True)
+
+
 def _run_demucs(job: Job, source: Path, job_dir: Path, device: str) -> tuple[int, list[str]]:
     """One demucs job dispatched to the persistent worker for `device`:
     reuse-or-spawn, stream progress, watchdog stalls.

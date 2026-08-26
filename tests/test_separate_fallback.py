@@ -304,3 +304,48 @@ def test_cancel_kills_worker_next_job_spawns_fresh(tmp_path, monkeypatch):
     sep_mod.separate(Job(id="abcdefabc331"), tmp_path / "source.wav", tmp_path)
 
     assert calls == ["cpu", "cpu"]  # two spawns: cancelled, then fresh
+
+
+def test_prewarm_spawns_the_worker_separate_reuses_it(job, tmp_path, monkeypatch):
+    """The whole point of prewarm(): the spawn it pays for during download/
+    prepare is the one separate() would otherwise pay for after them."""
+    calls: list[str] = []
+    monkeypatch.setattr(sep_mod, "get_demucs_device", lambda: "cpu")
+    monkeypatch.setattr(sep_mod, "_spawn_worker_cmd", _stub_spawns(set(), calls))
+
+    sep_mod.prewarm()
+    assert calls == ["cpu"]
+
+    stems_root = sep_mod.separate(job, tmp_path / "source.wav", tmp_path)
+
+    assert calls == ["cpu"], "separate() must reuse the prewarmed worker, not respawn"
+    assert (stems_root / "vocals.wav").is_file()
+
+
+def test_prewarm_respects_a_device_change_before_dispatch(job, tmp_path, monkeypatch):
+    """A Settings change between prewarm and dispatch wins: separate() reads
+    the device fresh and _get_worker respawns on the mismatch."""
+    calls: list[str] = []
+    monkeypatch.setattr(sep_mod, "_spawn_worker_cmd", _stub_spawns(set(), calls))
+    devices = iter(["cuda", "cpu", "cpu"])
+    monkeypatch.setattr(sep_mod, "get_demucs_device", lambda: next(devices))
+
+    sep_mod.prewarm()
+    sep_mod.separate(job, tmp_path / "source.wav", tmp_path)
+
+    assert calls == ["cuda", "cpu"]
+
+
+def test_prewarm_swallows_spawn_failures(monkeypatch):
+    """Best-effort: a broken spawn is the real dispatch's to report, with a
+    job to attach it to -- prewarm must never take the pipeline down."""
+
+    def boom(device: str) -> list[str]:
+        raise OSError("no such executable")
+
+    monkeypatch.setattr(sep_mod, "get_demucs_device", lambda: "cpu")
+    monkeypatch.setattr(sep_mod, "_spawn_worker_cmd", boom)
+
+    sep_mod.prewarm()  # must not raise
+
+    assert sep_mod._worker.get("proc") is None
