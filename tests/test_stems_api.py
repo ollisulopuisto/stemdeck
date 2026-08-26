@@ -1111,3 +1111,90 @@ def test_the_peaks_route_guards_like_the_old_one(client, tmp_path):
 
     for bad_id in ("../etc", "ABC", "abcdefabcdef0", "abcdefabcde"):
         assert client.get(f"/api/jobs/{bad_id}/peaks").status_code == 404, bad_id
+
+
+# ── AAC encoder selection for the MP4 video export ──
+#
+# On macOS the export prefers Apple's AudioToolbox encoder (aac_at) when the
+# ffmpeg build carries it; everywhere else, and on any probe trouble, it must
+# stay on the native "aac" encoder exactly as before.
+
+_ENCODERS_WITH_AAC_AT = """Encoders:
+ A....D aac                  AAC (Advanced Audio Coding)
+ A....D aac_at               aac (AudioToolbox codec) (codec aac)
+ A....D libvorbis            libvorbis (codec vorbis)
+"""
+
+_ENCODERS_WITHOUT_AAC_AT = """Encoders:
+ A....D aac                  AAC (Advanced Audio Coding)
+ A....D libvorbis            libvorbis (codec vorbis)
+"""
+
+
+@pytest.fixture()
+def _aac_probe(monkeypatch, tmp_path):
+    """Reset the once-per-process probe cache and return a helper that stubs
+    the platform and the `ffmpeg -encoders` output the probe sees."""
+    from app.api import stems as stems_mod
+
+    monkeypatch.setattr(stems_mod, "_aac_encoder_cache", None)
+
+    def arrange(platform: str, encoders_output: str | None) -> None:
+        monkeypatch.setattr(stems_mod.sys, "platform", platform)
+        stub = tmp_path / "ffmpeg-stub"
+        if encoders_output is None:
+            # No stub on disk -- the probe's Popen fails with FileNotFoundError.
+            monkeypatch.setattr(stems_mod, "ffmpeg_executable", lambda: str(stub))
+            return
+        stub.write_text(f"#!/bin/sh\ncat <<'ENCODERS'\n{encoders_output}\nENCODERS\n")
+        stub.chmod(0o755)
+        monkeypatch.setattr(stems_mod, "ffmpeg_executable", lambda: str(stub))
+
+    return arrange
+
+
+def test_aac_encoder_prefers_audiotoolbox_on_macos(_aac_probe):
+    from app.api import stems as stems_mod
+
+    _aac_probe("darwin", _ENCODERS_WITH_AAC_AT)
+    assert stems_mod._aac_encoder() == "aac_at"
+
+
+def test_aac_encoder_native_on_macos_build_without_audiotoolbox(_aac_probe):
+    from app.api import stems as stems_mod
+
+    _aac_probe("darwin", _ENCODERS_WITHOUT_AAC_AT)
+    assert stems_mod._aac_encoder() == "aac"
+
+
+def test_aac_encoder_native_when_the_probe_itself_fails(_aac_probe):
+    from app.api import stems as stems_mod
+
+    _aac_probe("darwin", None)
+    assert stems_mod._aac_encoder() == "aac"
+
+
+def test_aac_encoder_never_probes_off_macos(_aac_probe, monkeypatch):
+    """Linux/Windows must not even pay for the probe: the encoder is "aac"
+    without running ffmpeg at all."""
+    from app.api import stems as stems_mod
+
+    def no_probe(*args, **kwargs):
+        raise AssertionError("ffmpeg must not be probed off macOS")
+
+    _aac_probe("linux", None)
+    monkeypatch.setattr(stems_mod.subprocess, "run", no_probe)
+    assert stems_mod._aac_encoder() == "aac"
+
+
+def test_aac_encoder_probes_once_per_process(_aac_probe, monkeypatch):
+    from app.api import stems as stems_mod
+
+    _aac_probe("darwin", _ENCODERS_WITH_AAC_AT)
+    assert stems_mod._aac_encoder() == "aac_at"
+
+    def no_probe(*args, **kwargs):
+        raise AssertionError("second call must hit the cache")
+
+    monkeypatch.setattr(stems_mod.subprocess, "run", no_probe)
+    assert stems_mod._aac_encoder() == "aac_at"
