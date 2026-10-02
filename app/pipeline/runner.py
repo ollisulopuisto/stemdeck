@@ -36,7 +36,7 @@ from app.pipeline.identify import IdentifyLookup, release_source
 from app.pipeline.lyrics_lookup import LyricsLookup
 from app.pipeline.lyrics_retime import retime_after_separation
 from app.pipeline.sections import detect_sections
-from app.pipeline.separate import separate
+from app.pipeline.separate import prewarm, separate
 from app.pipeline.transcribe import transcribe_lyrics
 
 logger = logging.getLogger("stemdeck.pipeline")
@@ -342,6 +342,10 @@ def _run_with_band_lookup(job: Job, source: Path, job_dir: Path) -> None:
 
 def _run_blocking(job: Job, url: str, job_dir: Path) -> None:
     _check_cancel(job)
+    # Spawn the demucs worker now so it loads the model while the source
+    # downloads, instead of after -- see separate.prewarm. Fire-and-forget:
+    # the spawn returns immediately and the child warms up concurrently.
+    prewarm()
     mark = time.monotonic()
     source = download(job, url, job_dir)
     _lap(job, "download", mark)
@@ -350,6 +354,9 @@ def _run_blocking(job: Job, url: str, job_dir: Path) -> None:
 
 def _run_local_blocking(job: Job, source_path: Path, job_dir: Path) -> None:
     _check_cancel(job)
+    # Same overlap as the URL pipeline: the ffmpeg transcode (and the
+    # analyze stage after it) runs while the worker loads the model.
+    prewarm()
     mark = time.monotonic()
     source = _prepare_local_source(job, source_path, job_dir)
     _lap(job, "prepare", mark)

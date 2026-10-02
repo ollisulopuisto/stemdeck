@@ -304,3 +304,103 @@ def test_cancel_kills_worker_next_job_spawns_fresh(tmp_path, monkeypatch):
     sep_mod.separate(Job(id="abcdefabc331"), tmp_path / "source.wav", tmp_path)
 
     assert calls == ["cpu", "cpu"]  # two spawns: cancelled, then fresh
+
+
+def test_prewarm_spawns_the_worker_separate_reuses_it(job, tmp_path, monkeypatch):
+    """The whole point of prewarm(): the spawn it pays for during download/
+    prepare is the one separate() would otherwise pay for after them."""
+    calls: list[str] = []
+    monkeypatch.setattr(sep_mod, "get_demucs_device", lambda: "cpu")
+    monkeypatch.setattr(sep_mod, "_spawn_worker_cmd", _stub_spawns(set(), calls))
+
+    sep_mod.prewarm()
+    assert calls == ["cpu"]
+
+    stems_root = sep_mod.separate(job, tmp_path / "source.wav", tmp_path)
+
+    assert calls == ["cpu"], "separate() must reuse the prewarmed worker, not respawn"
+    assert (stems_root / "vocals.wav").is_file()
+
+
+def test_prewarm_respects_a_device_change_before_dispatch(job, tmp_path, monkeypatch):
+    """A Settings change between prewarm and dispatch wins: separate() reads
+    the device fresh and _get_worker respawns on the mismatch."""
+    calls: list[str] = []
+    monkeypatch.setattr(sep_mod, "_spawn_worker_cmd", _stub_spawns(set(), calls))
+    devices = iter(["cuda", "cpu", "cpu"])
+    monkeypatch.setattr(sep_mod, "get_demucs_device", lambda: next(devices))
+
+    sep_mod.prewarm()
+    sep_mod.separate(job, tmp_path / "source.wav", tmp_path)
+
+    assert calls == ["cuda", "cpu"]
+
+
+def test_prewarm_swallows_spawn_failures(monkeypatch):
+    """Best-effort: a broken spawn is the real dispatch's to report, with a
+    job to attach it to -- prewarm must never take the pipeline down."""
+
+    def boom(device: str) -> list[str]:
+        raise OSError("no such executable")
+
+    monkeypatch.setattr(sep_mod, "get_demucs_device", lambda: "cpu")
+    monkeypatch.setattr(sep_mod, "_spawn_worker_cmd", boom)
+
+    sep_mod.prewarm()  # must not raise
+
+    assert sep_mod._worker.get("proc") is None
+
+
+def test_prewarmed_worker_survives_a_cancel_before_separate(job, tmp_path, monkeypatch):
+    """A job cancelled during the download never reaches separate(), so nothing
+    kills the prewarmed worker. It stays up, idle, and the next job reuses it:
+    a worker that ran no job has no state to clean."""
+    calls: list[str] = []
+    monkeypatch.setattr(sep_mod, "get_demucs_device", lambda: "cpu")
+    monkeypatch.setattr(sep_mod, "_spawn_worker_cmd", _stub_spawns(set(), calls))
+
+    sep_mod.prewarm()  # ...then the job is cancelled; separate() is never called
+    sep_mod.separate(job, tmp_path / "source.wav", tmp_path)
+
+    assert calls == ["cpu"], "the next job must reuse the idle prewarmed worker"
+
+
+_READY_WORKER = """
+import sys, json, os
+sys.stderr.write("@@READY@@1.234\\n")
+sys.stderr.flush()
+for line in sys.stdin:
+    req = json.loads(line)
+    d = os.path.join(req["job_dir"], "htdemucs_6s", "source")
+    os.makedirs(d, exist_ok=True)
+    open(os.path.join(d, "vocals.wav"), "wb").write(b"RIFF")
+    sys.stderr.write("100%\\n@@DONE@@\\n")
+    sys.stderr.flush()
+"""
+
+
+def test_records_the_workers_model_load_time(job, tmp_path, monkeypatch):
+    """The worker announces how long its model load took, so what prewarm can
+    hide is measured on its own, apart from separate_startup."""
+    monkeypatch.setattr(sep_mod, "get_demucs_device", lambda: "cpu")
+    monkeypatch.setattr(
+        sep_mod, "_spawn_worker_cmd", lambda device: [sys.executable, "-c", _READY_WORKER]
+    )
+
+    sep_mod.prewarm()
+    sep_mod.separate(job, tmp_path / "source.wav", tmp_path)
+
+    assert job.stage_timings is not None
+    assert job.stage_timings["separate_model_load"] == 1.2
+    assert "separate_startup" in job.stage_timings
+
+
+def test_prewarm_can_be_switched_off(monkeypatch):
+    calls: list[str] = []
+    monkeypatch.setattr(sep_mod, "PREWARM_WORKER", False)
+    monkeypatch.setattr(sep_mod, "get_demucs_device", lambda: "cpu")
+    monkeypatch.setattr(sep_mod, "_spawn_worker_cmd", _stub_spawns(set(), calls))
+
+    sep_mod.prewarm()
+
+    assert calls == []

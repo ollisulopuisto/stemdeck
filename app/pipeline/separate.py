@@ -11,7 +11,7 @@ import threading
 import time
 from pathlib import Path
 
-from app.core.config import DEMUCS_MODEL, TIMEOUT_DEMUCS_STALL
+from app.core.config import DEMUCS_MODEL, PREWARM_WORKER, TIMEOUT_DEMUCS_STALL
 from app.core.models import Job, JobCancelled, _set
 from app.core.registry import set_proc
 from app.core.settings import get_demucs_device, get_separation_quality
@@ -104,6 +104,43 @@ def _get_worker(device: str) -> subprocess.Popen:
     return proc
 
 
+def prewarm(device: str | None = None) -> None:
+    """Spawn the persistent demucs worker before the separate stage needs it,
+    so its startup cost overlaps the download/prepare stages instead of
+    serializing after them.
+
+    A freshly spawned worker pays interpreter start + torch import + model
+    load -- and on the first GPU dispatch, kernel/shader compilation --
+    before the first progress line (#288/#309). All of that happens in the
+    child after Popen returns, so calling this at the top of the pipeline
+    costs the parent nothing and lets the worker warm up while yt-dlp or
+    ffmpeg is doing the source work. separate() then reuses the warm worker
+    through the same _get_worker path, or respawns if the device setting
+    changed in between -- exactly the reuse rules it already has.
+
+    Runs on every platform by default, on purpose; STEMDECK_PREWARM=0 turns
+    it off. The model loads to CPU and
+    only moves to the device inside apply_model, so no VRAM is held while the
+    source downloads; the price is ~350 MB of resident memory from the start
+    of the job instead of from the separate stage, which matters only in a
+    memory-capped container.
+
+    A job cancelled before the separate stage never reaches _kill_worker, so
+    the prewarmed worker stays alive and idle. That is a deliberate resting
+    state: a worker that has run no job has clean state, and the next job
+    reuses it through _get_worker.
+
+    Best-effort by design: a spawn problem here is not this stage's to
+    report. The real dispatch owns error handling (and the CPU fallback),
+    and it will hit the same problem with a job to attach it to."""
+    if not PREWARM_WORKER:
+        return
+    try:
+        _get_worker(device or get_demucs_device())
+    except Exception:
+        logger.debug("demucs worker prewarm failed; separate() will respawn", exc_info=True)
+
+
 def _run_demucs(job: Job, source: Path, job_dir: Path, device: str) -> tuple[int, list[str]]:
     """One demucs job dispatched to the persistent worker for `device`:
     reuse-or-spawn, stream progress, watchdog stalls.
@@ -178,6 +215,19 @@ def _run_demucs(job: Job, source: Path, job_dir: Path, device: str) -> tuple[int
                 line = buf.strip()
                 buf = ""
                 if not line:
+                    continue
+                if line.startswith("@@READY@@"):
+                    # Sent once by a freshly spawned worker when the model is
+                    # loaded; the value is the load time in the worker, which
+                    # is what prewarm can hide (separate_startup is only what
+                    # was left to wait for after dispatch).
+                    try:
+                        load = round(float(line[len("@@READY@@") :]), 1)
+                    except ValueError:
+                        continue
+                    if job.stage_timings is None:
+                        job.stage_timings = {}
+                    job.stage_timings["separate_model_load"] = load
                     continue
                 if line == "@@DONE@@":
                     job_ok = True
