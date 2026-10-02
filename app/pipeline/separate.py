@@ -118,6 +118,17 @@ def prewarm(device: str | None = None) -> None:
     through the same _get_worker path, or respawns if the device setting
     changed in between -- exactly the reuse rules it already has.
 
+    Unconditional on every platform, on purpose. The model loads to CPU and
+    only moves to the device inside apply_model, so no VRAM is held while the
+    source downloads; the price is ~350 MB of resident memory from the start
+    of the job instead of from the separate stage, which matters only in a
+    memory-capped container.
+
+    A job cancelled before the separate stage never reaches _kill_worker, so
+    the prewarmed worker stays alive and idle. That is a deliberate resting
+    state: a worker that has run no job has clean state, and the next job
+    reuses it through _get_worker.
+
     Best-effort by design: a spawn problem here is not this stage's to
     report. The real dispatch owns error handling (and the CPU fallback),
     and it will hit the same problem with a job to attach it to."""

@@ -349,3 +349,17 @@ def test_prewarm_swallows_spawn_failures(monkeypatch):
     sep_mod.prewarm()  # must not raise
 
     assert sep_mod._worker.get("proc") is None
+
+
+def test_prewarmed_worker_survives_a_cancel_before_separate(job, tmp_path, monkeypatch):
+    """A job cancelled during the download never reaches separate(), so nothing
+    kills the prewarmed worker. It stays up, idle, and the next job reuses it:
+    a worker that ran no job has no state to clean."""
+    calls: list[str] = []
+    monkeypatch.setattr(sep_mod, "get_demucs_device", lambda: "cpu")
+    monkeypatch.setattr(sep_mod, "_spawn_worker_cmd", _stub_spawns(set(), calls))
+
+    sep_mod.prewarm()  # ...then the job is cancelled; separate() is never called
+    sep_mod.separate(job, tmp_path / "source.wav", tmp_path)
+
+    assert calls == ["cpu"], "the next job must reuse the idle prewarmed worker"
