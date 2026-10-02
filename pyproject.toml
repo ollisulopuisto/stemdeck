@@ -77,11 +77,15 @@ dependencies = [
     # on licensing grounds. Excludes Intel macOS: requires numpy>=2/torch>=2.3,
     # which conflicts with the numpy<2/torch<2.3 pins that platform is stuck on
     # above; the feature gates itself off there rather than fighting the pins.
-    # CPU-only onnxruntime for now -- onnxruntime-gpu is a separate, mutually
-    # exclusive package requiring the same kind of CPU/GPU build-time split
-    # torch already gets via make-portable.{sh,ps1} (see versioning.md); wiring
-    # that up for this occasional, best-effort action is a follow-up, not a
-    # blocker, since the main separation already gets full GPU accel via torch.
+    # The standard onnxruntime package, which is CPU-only in the CUDA sense:
+    # onnxruntime-gpu is a separate, mutually exclusive package requiring the
+    # same kind of CPU/GPU build-time split torch already gets via
+    # make-portable.{sh,ps1} (see versioning.md); wiring that up for this
+    # occasional, best-effort action is a follow-up, not a blocker, since the
+    # main separation already gets full GPU accel via torch. On Apple Silicon
+    # this wheel is NOT CPU-only: it ships CoreMLExecutionProvider, and
+    # audio-separator auto-enables it (plus torch MPS for its STFT work) --
+    # verified on an M2 runtime pack. Do not add a package swap for macOS.
     "audio-separator>=0.24; sys_platform != 'darwin' or platform_machine != 'x86_64'",
     "onnxruntime>=1.19; sys_platform != 'darwin' or platform_machine != 'x86_64'",
     # audio-separator imports this directly; librosa<1 pulls it in transitively
