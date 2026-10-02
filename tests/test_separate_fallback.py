@@ -363,3 +363,44 @@ def test_prewarmed_worker_survives_a_cancel_before_separate(job, tmp_path, monke
     sep_mod.separate(job, tmp_path / "source.wav", tmp_path)
 
     assert calls == ["cpu"], "the next job must reuse the idle prewarmed worker"
+
+
+_READY_WORKER = """
+import sys, json, os
+sys.stderr.write("@@READY@@1.234\\n")
+sys.stderr.flush()
+for line in sys.stdin:
+    req = json.loads(line)
+    d = os.path.join(req["job_dir"], "htdemucs_6s", "source")
+    os.makedirs(d, exist_ok=True)
+    open(os.path.join(d, "vocals.wav"), "wb").write(b"RIFF")
+    sys.stderr.write("100%\\n@@DONE@@\\n")
+    sys.stderr.flush()
+"""
+
+
+def test_records_the_workers_model_load_time(job, tmp_path, monkeypatch):
+    """The worker announces how long its model load took, so what prewarm can
+    hide is measured on its own, apart from separate_startup."""
+    monkeypatch.setattr(sep_mod, "get_demucs_device", lambda: "cpu")
+    monkeypatch.setattr(
+        sep_mod, "_spawn_worker_cmd", lambda device: [sys.executable, "-c", _READY_WORKER]
+    )
+
+    sep_mod.prewarm()
+    sep_mod.separate(job, tmp_path / "source.wav", tmp_path)
+
+    assert job.stage_timings is not None
+    assert job.stage_timings["separate_model_load"] == 1.2
+    assert "separate_startup" in job.stage_timings
+
+
+def test_prewarm_can_be_switched_off(monkeypatch):
+    calls: list[str] = []
+    monkeypatch.setattr(sep_mod, "PREWARM_WORKER", False)
+    monkeypatch.setattr(sep_mod, "get_demucs_device", lambda: "cpu")
+    monkeypatch.setattr(sep_mod, "_spawn_worker_cmd", _stub_spawns(set(), calls))
+
+    sep_mod.prewarm()
+
+    assert calls == []
