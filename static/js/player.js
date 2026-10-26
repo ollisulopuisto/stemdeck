@@ -1975,7 +1975,7 @@ export function downloadCurrentVideo(onTransferStart) {
     .slice(0, 80)
     .replace(/^_+|_+$/g, "");
   const name = safe ? `${safe}_video.mp4` : "video.mp4";
-  return _triggerDownload(`/api/jobs/${currentJobId}/video.mp4?${q}`, name, onTransferStart);
+  return _triggerDownload(`/api/jobs/${encodeURIComponent(currentJobId)}/video.mp4?${q}`, name, onTransferStart);
 }
 
 
@@ -1994,7 +1994,7 @@ export function downloadAllStemsZip(format = "wav", onTransferStart) {
     .replace(/^_+|_+$/g, "");
   const name = safe ? `${safe}_stems.zip` : "stems.zip";
   const q = new URLSearchParams({ format, stems: names.join(",") });
-  return _triggerDownload(`/api/jobs/${currentJobId}/stems/all.zip?${q}`, name, onTransferStart);
+  return _triggerDownload(`/api/jobs/${encodeURIComponent(currentJobId)}/stems/all.zip?${q}`, name, onTransferStart);
 }
 
 function _regionFilename(ext) {

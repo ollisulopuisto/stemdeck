@@ -555,7 +555,7 @@ function connectEvents(jobId) {
   let stopped = false;
 
   const open = () => {
-    const es = new EventSource(`/api/jobs/${jobId}/events`);
+    const es = new EventSource(`/api/jobs/${encodeURIComponent(jobId)}/events`);
     setEventSource(es);
 
     es.onmessage = (ev) => {
