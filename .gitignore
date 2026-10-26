@@ -84,6 +84,11 @@ logs/
 .vscode/
 .DS_Store
 Thumbs.db
+*~
+*.bak
+*.backup
+*.swp
+*.swo
 
 # Tool versions
 .python-version

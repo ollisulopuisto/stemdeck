@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.core.models import Job
 from app.core.registry import _jobs
-from tests.ffmpeg_probe import ffmpeg_available, skip_without_ffmpeg
+from tests.ffmpeg_probe import ffmpeg_available, skip_without_ffmpeg, skip_without_vorbis
 
 
 @pytest.fixture(autouse=True)
@@ -414,6 +414,8 @@ def test_all_stems_zip_ogg(client, tmp_path):
         pytest.skip("ffmpeg not available")
 
     import struct
+
+    skip_without_vorbis()
 
     sr = 8000
     nframes = sr // 10
@@ -942,7 +944,7 @@ def test_rendered_exports_declare_their_length(client, tmp_path):
 def test_ogg_is_still_streamed(client, tmp_path):
     """Ogg keeps a granule position on every page and patches nothing
     afterwards, so it has no reason to pay for a full render first."""
-    _skip_without_ffmpeg()
+    skip_without_vorbis()
     job = _done_job_with_stems(tmp_path, "abcdef000036", ["vocals"])
     r = client.get(f"/api/jobs/{job.id}/mixdown.ogg?stems=vocals&gains=1")
     assert r.status_code == 200

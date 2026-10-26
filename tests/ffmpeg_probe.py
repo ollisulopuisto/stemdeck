@@ -37,3 +37,26 @@ def ffmpeg_available() -> bool:
 def skip_without_ffmpeg() -> None:
     if not ffmpeg_available():
         pytest.skip("ffmpeg not available (not bundled and not on PATH)")
+
+
+def vorbis_available() -> bool:
+    """Whether the ffmpeg the app runs has libvorbis."""
+    from app.core.config import ffmpeg_executable
+
+    try:
+        res = subprocess.run(
+            [ffmpeg_executable(), "-hide_banner", "-encoders"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        return "libvorbis" in res.stdout
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def skip_without_vorbis() -> None:
+    """For a test that renders a real OGG. Homebrew's ffmpeg has no libvorbis (#824)."""
+    skip_without_ffmpeg()
+    if not vorbis_available():
+        pytest.skip("ffmpeg has no libvorbis encoder, so OGG export is unavailable here (#824)")
