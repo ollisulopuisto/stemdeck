@@ -52,9 +52,9 @@ export async function runVocalSplitIfWanted(state) {
   splitAutoTriggered.add(state.job_id);
   if (state.job_id === foregroundJobId) setWaveformLoading(true, "Splitting lead/backing vocals…");
   try {
-    const res = await fetch(`/api/jobs/${state.job_id}/vocal-split`, { method: "POST" });
+    const res = await fetch(`/api/jobs/${encodeURIComponent(state.job_id)}/vocal-split`, { method: "POST" });
     if (!(res.ok || res.status === 202)) return state;
-    const r2 = await fetch(`/api/jobs/${state.job_id}`);
+    const r2 = await fetch(`/api/jobs/${encodeURIComponent(state.job_id)}`);
     if (!r2.ok) return state;
     const finalState = await r2.json();
     addTrackToLibrary({
@@ -522,7 +522,7 @@ function applyState(state) {
 }
 
 async function probeJob(jobId) {
-  const r = await fetch(`/api/jobs/${jobId}`);
+  const r = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`);
   if (!r.ok) {
     if (r.status === 404) throw new Error(t("job.noLongerExists"));
     throw new Error(`Job probe failed: ${r.status}`);
@@ -620,7 +620,7 @@ async function cancelCurrentJob() {
   jobCancelBtn.disabled = true;
   jobCancelBtn.textContent = t("job.cancelling");
   try {
-    await fetch(`/api/jobs/${id}/cancel`, { method: "POST" });
+    await fetch(`/api/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST" });
     // The next SSE frame (or the REST probe in connectEvents) will
     // surface the cancelled state and hide the button via applyState.
   } catch {

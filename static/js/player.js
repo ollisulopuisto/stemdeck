@@ -1181,11 +1181,12 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
   // origin window, preventing stem WAV queuing that causes buffer underruns.
   let precomputedPeaks = {};
   const _footerStemName = stems.find((s) => s.name === "original") ? "original" : stems[0]?.name;
-  const _peaksPromise = peaksPromise ?? (jobId
+  const safeJobId = jobId ? encodeURIComponent(jobId) : null;
+  const _peaksPromise = peaksPromise ?? (safeJobId
     ? (() => {
         const ac = new AbortController();
         const timer = setTimeout(() => ac.abort(), 3000);
-        return fetch(`/api/jobs/${jobId}/peaks`, { signal: ac.signal })
+        return fetch(`/api/jobs/${safeJobId}/peaks`, { signal: ac.signal })
           .then((r) => (r.ok ? r.json() : {}))
           .catch(() => ({}))
           .finally(() => clearTimeout(timer));
@@ -1195,11 +1196,11 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
   // Beat grid for the click track. Fetched alongside peaks; a 404 is the
   // normal answer for jobs separated before the beat-grid stage existed, and
   // simply leaves the click control disabled.
-  const _beatsPromise = jobId
+  const _beatsPromise = safeJobId
     ? (() => {
         const ac = new AbortController();
         const timer = setTimeout(() => ac.abort(), 5000);
-        return fetch(`/api/jobs/${jobId}/beats`, { signal: ac.signal })
+        return fetch(`/api/jobs/${safeJobId}/beats`, { signal: ac.signal })
           .then((r) => (r.ok ? r.json() : null))
           .catch(() => null)
           .finally(() => clearTimeout(timer));
@@ -1922,7 +1923,7 @@ function _mixdownUrl(ext, region) {
   }
   _clickParams(q);
   _countInParam(q);
-  return `/api/jobs/${currentJobId}/mixdown.${ext}?${q}`;
+  return `/api/jobs/${encodeURIComponent(currentJobId)}/mixdown.${encodeURIComponent(ext)}?${q}`;
 }
 
 // One stem, named after the song so it stays identifiable once dragged into a
@@ -2049,7 +2050,7 @@ export function stemRegionDragPayload(name, ext = "wav") {
     .replace(/^_+|_+$/g, "");
   const stem = safe ? `${safe}_${name}` : name;
   return {
-    url: _absolute(`/api/jobs/${currentJobId}/mixdown.${ext}?${q}`),
+    url: _absolute(`/api/jobs/${encodeURIComponent(currentJobId)}/mixdown.${encodeURIComponent(ext)}?${q}`),
     filename: `${stem}_region_${_loopSpan()}.${ext}`,
   };
 }
@@ -2074,7 +2075,11 @@ export function regionDragPayload(ext = "wav") {
 export function prewarmRegionMix(ext = "wav") {
   const payload = regionDragPayload(ext);
   if (!payload) return;
-  fetch(payload.url, { headers: { Range: "bytes=0-0" } }).catch(() => {});
+  try {
+    const u = new URL(payload.url, window.location.origin);
+    if (u.origin !== window.location.origin || !u.pathname.startsWith("/api/jobs/")) return;
+    fetch(u.pathname + u.search, { headers: { Range: "bytes=0-0" } }).catch(() => {});
+  } catch {}
 }
 
 export function downloadRegionMix(ext = "wav", onTransferStart) {
