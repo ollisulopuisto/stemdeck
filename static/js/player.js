@@ -1185,7 +1185,7 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
     ? (() => {
         const ac = new AbortController();
         const timer = setTimeout(() => ac.abort(), 3000);
-        return fetch(`/api/jobs/${jobId}/peaks`, { signal: ac.signal })
+        return fetch(`/api/jobs/${encodeURIComponent(jobId)}/peaks`, { signal: ac.signal })
           .then((r) => (r.ok ? r.json() : {}))
           .catch(() => ({}))
           .finally(() => clearTimeout(timer));
@@ -1199,7 +1199,7 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
     ? (() => {
         const ac = new AbortController();
         const timer = setTimeout(() => ac.abort(), 5000);
-        return fetch(`/api/jobs/${jobId}/beats`, { signal: ac.signal })
+        return fetch(`/api/jobs/${encodeURIComponent(jobId)}/beats`, { signal: ac.signal })
           .then((r) => (r.ok ? r.json() : null))
           .catch(() => null)
           .finally(() => clearTimeout(timer));
@@ -1922,7 +1922,7 @@ function _mixdownUrl(ext, region) {
   }
   _clickParams(q);
   _countInParam(q);
-  return `/api/jobs/${currentJobId}/mixdown.${ext}?${q}`;
+  return `/api/jobs/${encodeURIComponent(currentJobId)}/mixdown.${ext}?${q}`;
 }
 
 // One stem, named after the song so it stays identifiable once dragged into a
@@ -1974,7 +1974,7 @@ export function downloadCurrentVideo(onTransferStart) {
     .slice(0, 80)
     .replace(/^_+|_+$/g, "");
   const name = safe ? `${safe}_video.mp4` : "video.mp4";
-  return _triggerDownload(`/api/jobs/${currentJobId}/video.mp4?${q}`, name, onTransferStart);
+  return _triggerDownload(`/api/jobs/${encodeURIComponent(currentJobId)}/video.mp4?${q}`, name, onTransferStart);
 }
 
 
@@ -1993,7 +1993,7 @@ export function downloadAllStemsZip(format = "wav", onTransferStart) {
     .replace(/^_+|_+$/g, "");
   const name = safe ? `${safe}_stems.zip` : "stems.zip";
   const q = new URLSearchParams({ format, stems: names.join(",") });
-  return _triggerDownload(`/api/jobs/${currentJobId}/stems/all.zip?${q}`, name, onTransferStart);
+  return _triggerDownload(`/api/jobs/${encodeURIComponent(currentJobId)}/stems/all.zip?${q}`, name, onTransferStart);
 }
 
 function _regionFilename(ext) {
@@ -2049,7 +2049,7 @@ export function stemRegionDragPayload(name, ext = "wav") {
     .replace(/^_+|_+$/g, "");
   const stem = safe ? `${safe}_${name}` : name;
   return {
-    url: _absolute(`/api/jobs/${currentJobId}/mixdown.${ext}?${q}`),
+    url: _absolute(`/api/jobs/${encodeURIComponent(currentJobId)}/mixdown.${ext}?${q}`),
     filename: `${stem}_region_${_loopSpan()}.${ext}`,
   };
 }
@@ -2074,7 +2074,7 @@ export function regionDragPayload(ext = "wav") {
 export function prewarmRegionMix(ext = "wav") {
   const payload = regionDragPayload(ext);
   if (!payload) return;
-  fetch(payload.url, { headers: { Range: "bytes=0-0" } }).catch(() => {});
+  fetch(encodeURI(payload.url), { headers: { Range: "bytes=0-0" } }).catch(() => {});
 }
 
 export function downloadRegionMix(ext = "wav", onTransferStart) {

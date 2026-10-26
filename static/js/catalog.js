@@ -1053,14 +1053,14 @@ async function loadTrackIntoStudio(trackId) {
   // resolves before wireUpAudio calls Multitrack.create. This prevents peaks.json
   // from competing with stem WAV fetches for Safari's 6-connection-per-origin limit.
   // /peaks rather than stems/peaks.json: see get_peaks in app/api/stems.py.
-  const peaksPromise = fetch(`/api/jobs/${trackId}/peaks`)
+  const peaksPromise = fetch(`/api/jobs/${encodeURIComponent(trackId)}/peaks`)
     .then((r) => (r.ok ? r.json() : {}))
     .catch(() => ({}));
 
   // Always fetch fresh state so server-side changes (sections, analysis, stems)
   // are reflected — cached localStorage data can be stale.
   try {
-    const res = await fetch(`/api/jobs/${trackId}`);
+    const res = await fetch(`/api/jobs/${encodeURIComponent(trackId)}`);
     if (token !== _loadTrackToken) return;
     if (res.ok) {
       const state = await res.json();
@@ -2240,7 +2240,7 @@ async function completeSettledJob(jobId) {
   const existing = tracks[jobId];
   if (!existing) return; // not ours (or already deleted)
   try {
-    const res = await fetch(`/api/jobs/${jobId}`, { cache: "no-store" });
+    const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`, { cache: "no-store" });
     if (!res.ok) {
       // 404 means the job is gone from the backend entirely.
       if (res.status === 404) updateTrackStatus(jobId, "unavailable");
@@ -2620,7 +2620,7 @@ function wireCatalogRailViews() {
       const failed = [];
       for (const id of toDelete) {
         try {
-          const res = await fetch(`/api/jobs/${id}`, { method: "DELETE" });
+          const res = await fetch(`/api/jobs/${encodeURIComponent(id)}`, { method: "DELETE" });
           if (!res.ok && res.status !== 404) failed.push(id);
         } catch (err) {
           console.warn("[catalog] delete failed for", id, err);
@@ -4900,7 +4900,7 @@ async function waitForJobTerminal(jobId) {
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 1500));
     try {
-      const r = await fetch(`/api/jobs/${jobId}`, { cache: "no-store" });
+      const r = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`, { cache: "no-store" });
       if (r.status === 404) return;
       const s = await r.json();
       if (s.status === "done" || s.status === "error" || s.status === "cancelled") return;

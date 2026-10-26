@@ -266,7 +266,7 @@ async function _save() {
   if (!_jobId || !_dirty) return;
   const payload = { beats: _beats.map((t) => +t.toFixed(6)), bars: _bars };
   try {
-    const r = await fetch(`/api/jobs/${_jobId}/beats`, {
+    const r = await fetch(`/api/jobs/${encodeURIComponent(_jobId)}/beats`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -290,8 +290,8 @@ export function flushBeatGrid() {
 export async function resetBeatGrid() {
   if (!_jobId) return null;
   try {
-    await fetch(`/api/jobs/${_jobId}/beats`, { method: "DELETE" });
-    const r = await fetch(`/api/jobs/${_jobId}/beats`);
+    await fetch(`/api/jobs/${encodeURIComponent(_jobId)}/beats`, { method: "DELETE" });
+    const r = await fetch(`/api/jobs/${encodeURIComponent(_jobId)}/beats`);
     if (!r.ok) return null;
     const grid = await r.json();
     _pushUndo();

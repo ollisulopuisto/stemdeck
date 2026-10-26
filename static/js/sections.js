@@ -657,7 +657,7 @@ function _queueSaveSnapshot() {
 
 async function _sendSave(id, body) {
   try {
-    const res = await fetch(`/api/jobs/${id}/sections`, {
+    const res = await fetch(`/api/jobs/${encodeURIComponent(id)}/sections`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body,

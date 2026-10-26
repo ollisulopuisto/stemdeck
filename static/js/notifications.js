@@ -440,7 +440,7 @@ async function openFailureDialog(record) {
   // this response is built, since this is headed for a public report.
   if (!record.tail && record.context?.jobId) {
     try {
-      const res = await fetch(`/api/jobs/${record.context.jobId}/failure`);
+      const res = await fetch(`/api/jobs/${encodeURIComponent(record.context.jobId)}/failure`);
       if (res.ok) {
         const data = await res.json();
         record.tail = Array.isArray(data.tail) ? data.tail : [];
