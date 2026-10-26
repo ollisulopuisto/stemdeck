@@ -1132,7 +1132,7 @@ function warmLaneRegion(stem) {
   if (!payload || warmedLanes.has(payload.url)) return;
   warmedLanes.add(payload.url);
   // Range so this costs the render, which is the point, and not the transfer.
-  fetch(payload.url, { headers: { Range: "bytes=0-0" } }).catch(() => {
+  fetch(encodeURI(payload.url), { headers: { Range: "bytes=0-0" } }).catch(() => {
     // Let it be retried; a failed warm just means the drag renders instead.
     warmedLanes.delete(payload.url);
   });

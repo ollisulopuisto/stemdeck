@@ -171,7 +171,7 @@ export async function reorderQueuedJob(jobId, afterId) {
 
 export async function cancelQueuedJob(jobId) {
   try {
-    await fetch(`/api/jobs/${jobId}/cancel`, { method: "POST" });
+    await fetch(`/api/jobs/${encodeURIComponent(jobId)}/cancel`, { method: "POST" });
   } catch (e) {
     console.warn("[queue] cancel failed:", e);
   }
