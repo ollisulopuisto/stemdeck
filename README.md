@@ -347,6 +347,7 @@ The library is persistent by default (`STEMDECK_PERSIST_LIBRARY=1`), so tracks a
 | `STEMDECK_SSL_CERT` | (none) | PEM certificate; set with the key below to serve https directly. |
 | `STEMDECK_SSL_KEY` | (none) | PEM private key for the certificate above. |
 | `STEMDECK_HTTPS_PORT` | (none) | Serve https on this port *in addition* to the main listener. Set by the desktop app; see below. |
+| `PYTORCH_ENABLE_MPS_FALLBACK` | `1` for `mps` workers | Per-op CPU fallback on Apple Silicon. Set `0` to make an unsupported MPS op fail the GPU attempt loudly instead (diagnostic). |
 
 `run.sh` also reads: `HOST` (default `127.0.0.1`), `PORT` (default `8765`), `RELOAD=1` (enable uvicorn auto-reload for development), `FOREGROUND=1` (run in foreground instead of backgrounding).
 
@@ -441,6 +442,8 @@ Three ways to get a secure context, in order of least effort:
 - **Tunnel to localhost.** On the client: `ssh -N -L 8000:localhost:8000 user@host`, then open `http://localhost:8000`. The origin is now localhost, so everything works, including transpose.
 - **Tailscale Serve.** `tailscale serve 8000` on the host publishes StemDeck on your tailnet over real HTTPS with a genuine certificate, no warnings and nothing to install on the client beyond Tailscale itself. Note the plain Tailscale IP (`100.x.y.z`) is *not* a secure context; it has to go through `serve`.
 - **Any HTTPS reverse proxy** in front of StemDeck: Caddy, nginx, or a tunnel like Cloudflare Tunnel.
+
+**`GPU failed — retrying on CPU` on Apple Silicon:** separation uses Metal (MPS) automatically, and StemDeck launches the separation worker with `PYTORCH_ENABLE_MPS_FALLBACK=1`, so an operation PyTorch's MPS backend doesn't implement runs on CPU by itself instead of failing the whole job onto CPU. Seeing the full CPU retry therefore means a genuine GPU fault (most often out of memory — try closing other GPU-heavy apps). To diagnose which op is unsupported, launch with `PYTORCH_ENABLE_MPS_FALLBACK=0` and read the job's failure detail.
 
 **Page reloaded mid-job:** the job keeps running server-side. Wait for it to finish, then resubmit.
 

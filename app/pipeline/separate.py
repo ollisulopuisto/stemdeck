@@ -75,6 +75,17 @@ def _get_worker(device: str) -> subprocess.Popen:
     # separator both emit progress bars and can echo track metadata, neither of
     # which is guaranteed to be cp1252-safe.
     env["PYTHONIOENCODING"] = "utf-8:replace"
+    if device == "mps":
+        # htdemucs still hits ops PyTorch's MPS backend does not implement.
+        # Without this, the first NotImplementedError kills the worker and the
+        # whole job re-runs on CPU via the #276 fallback -- a 3-5x slowdown to
+        # route around a single op. With it, torch runs just the unsupported op
+        # on CPU and keeps the rest of the model on the GPU. It must be set
+        # before the child imports torch, which a fresh spawn guarantees and an
+        # in-process toggle could not. setdefault so an explicit user override
+        # wins; other devices are untouched (the flag is inert without an MPS
+        # backend anyway).
+        env.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
     try:
         import certifi
 

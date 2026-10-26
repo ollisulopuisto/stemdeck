@@ -304,3 +304,49 @@ def test_cancel_kills_worker_next_job_spawns_fresh(tmp_path, monkeypatch):
     sep_mod.separate(Job(id="abcdefabc331"), tmp_path / "source.wav", tmp_path)
 
     assert calls == ["cpu", "cpu"]  # two spawns: cancelled, then fresh
+
+
+def _spy_popen_env(monkeypatch) -> dict[str, dict]:
+    """Wrap subprocess.Popen inside separate.py to capture the env each worker
+    spawn is given, while still spawning the (stubbed) process for real."""
+    seen: dict[str, dict] = {}
+    real_popen = sep_mod.subprocess.Popen
+
+    def spy(cmd, **kwargs):
+        seen["env"] = kwargs.get("env")
+        return real_popen(cmd, **kwargs)
+
+    monkeypatch.setattr(sep_mod.subprocess, "Popen", spy)
+    return seen
+
+
+def test_mps_worker_spawns_with_op_level_cpu_fallback(monkeypatch):
+    """An mps worker gets PYTORCH_ENABLE_MPS_FALLBACK=1: one op the MPS
+    backend lacks must cost that op, not the whole job (see _get_worker)."""
+    monkeypatch.setattr(sep_mod, "_spawn_worker_cmd", _stub_spawns(set(), []))
+    seen = _spy_popen_env(monkeypatch)
+
+    sep_mod._get_worker("mps")
+
+    assert seen["env"]["PYTORCH_ENABLE_MPS_FALLBACK"] == "1"
+
+
+def test_mps_op_fallback_respects_an_explicit_user_override(monkeypatch):
+    monkeypatch.setattr(sep_mod, "_spawn_worker_cmd", _stub_spawns(set(), []))
+    monkeypatch.setenv("PYTORCH_ENABLE_MPS_FALLBACK", "0")
+    seen = _spy_popen_env(monkeypatch)
+
+    sep_mod._get_worker("mps")
+
+    assert seen["env"]["PYTORCH_ENABLE_MPS_FALLBACK"] == "0"
+
+
+@pytest.mark.parametrize("device", ["cuda", "cpu"])
+def test_non_mps_workers_do_not_get_the_mps_fallback_env(monkeypatch, device):
+    monkeypatch.setattr(sep_mod, "_spawn_worker_cmd", _stub_spawns(set(), []))
+    monkeypatch.delenv("PYTORCH_ENABLE_MPS_FALLBACK", raising=False)
+    seen = _spy_popen_env(monkeypatch)
+
+    sep_mod._get_worker(device)
+
+    assert "PYTORCH_ENABLE_MPS_FALLBACK" not in seen["env"]
