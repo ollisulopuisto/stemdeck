@@ -2,14 +2,14 @@
 import { STEM_NAMES } from "./constants.js";
 import { wireUpAudio, updateFooterTrack } from "./player.js";
 import { initSections } from "./sections.js";
-import { bpmChip, foregroundJobId, keyChip, saveSelectedStems, selectedStems, titleEl } from "./state.js";
+import { audioEngine, bpmChip, foregroundJobId, keyChip, multitrack, saveSelectedStems, selectedStems, titleEl } from "./state.js";
 import { refreshStemChoiceVisuals } from "./stemChoice.js";
 import { trackFormat, formatIconSvg, paintNowPlayingArt } from "./formatIcon.js";
 import { formatKey } from "./keyLabel.js";
 import { showError, importFromUrl, detachForegroundJob, runVocalSplitIfWanted } from "./job.js";
 import {
-  cancelQueuedJob, getQueueSnapshot, isPaused, onJobSettled, onQueueChange,
-  queueCount, queueRowStates, reorderQueuedJob, runningLabel, startQueue,
+  cancelQueuedJob, currentIds, getQueueSnapshot, isPaused, onJobSettled, onQueueChange,
+  queueCount, queueRowStates, refreshQueue, reorderQueuedJob, runningLabel, startQueue,
   startQueueStream,
 } from "./queue.js";
 import { fmtTime, isReimportableSource, storeGet, storeSet } from "./utils.js";
@@ -79,16 +79,33 @@ const FRIEND_GROUPS = [
       {
         name: "Killah Trakz",
         roleKey: "friends.role.killahTrakz",
-        url: "https://www.instagram.com/killahtrakz/",
+        links: [
+          { label: "Instagram", url: "https://www.instagram.com/killahtrakz/" },
+          { label: "Spotify", url: "https://open.spotify.com/artist/6nePYOqT4E7D4C48twPtKk" },
+          { label: "Apple Music", url: "https://music.apple.com/us/artist/killah-trakz/371296633" },
+        ],
         logo: "/img/friends/killah-trakz.jpg",
         avatar: true,
       },
       {
         name: "NIHIL",
         roleKey: "friends.role.nihil",
-        url: "https://www.instagram.com/somosnihil/",
+        links: [
+          { label: "Instagram", url: "https://www.instagram.com/somosnihil/" },
+          { label: "Spotify", url: "https://open.spotify.com/artist/1OeKplJxFNM6JHrWeo2SaV" },
+        ],
         logo: "/img/friends/nihil.jpg",
         avatar: true,
+      },
+      {
+        name: "Adrianna Claro",
+        roleKey: "friends.role.adriannaClaro",
+        logo: "/img/friends/adrianna-claro.webp",
+        avatar: true,
+        links: [
+          { label: "Spotify", url: "https://open.spotify.com/album/10fZ48iJhIe3lWcXSMUlFG" },
+          { label: "Apple Music", url: "https://music.apple.com/us/album/happy/1592026727?i=1592026728" },
+        ],
       },
     ],
   },
@@ -211,8 +228,18 @@ let _currentTrackId = null;
 // The open track's tags as the last render() saw them. See setCurrentTrack().
 let _renderedTagsKey = "";
 let _loadTrackToken = 0;
+// Imports submitted from the form, mapped to the load token at that moment. A
+// finished one opens in the studio only if nothing has been opened since (#747).
+const _autoOpenTokens = new Map();
 let catalogView = "library";
 let catalogSearchQuery = "";
+// Rows picked in the Trash with a click, Ctrl or Shift. A hold on one of them
+// restores them all. The anchor is where the next Shift+click range starts.
+const _trashSelection = new Set();
+let _trashAnchor = null;
+// How long a Trash row has to be held to restore it. daw.css reads it through
+// --hold-ms, so the fill and the timer cannot drift apart.
+const TRASH_HOLD_MS = 1000;
 
 // ─── Persistence ───
 
@@ -220,6 +247,13 @@ const TRASH_ID = "trash";
 // The default landing folder for unorganized tracks — protected from deletion.
 const UNSORTED_ID = "f-unsorted";
 const PROCESSING_STATUSES = new Set(["queued", "downloading", "analyzing", "separating", "processing"]);
+
+// One trash can for every "throw this away" button: the library rows and the
+// queue rows (#748), so the queue's cancel reads as the same action.
+const TRASH_ICON_SVG = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <polyline points="3 6 5 6 21 6"></polyline>
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+      </svg>`;
 const FOLDER_COLORS = ["#d8a84a", "#e85f6f", "#64c86f", "#4f9de8", "#a985f4"];
 const DEFAULT_FOLDER_COLOR = FOLDER_COLORS[0];
 const TRACK_DRAG_TYPE = "application/x-stemdeck-track";
@@ -690,6 +724,8 @@ export function updateTrackStatus(trackId, status) {
     for (const el of document.querySelectorAll(`.cat-item[data-id="${trackId}"]`)) {
       el.classList.toggle("unavailable", status === "unavailable");
     }
+    // A stopped row changes its line and gains Extract (#748), more than a dot.
+    if (status === "stopped") render();
   }
 }
 
@@ -938,7 +974,7 @@ function applyTrackInfoToPanel(track) {
  */
 function syncTrashToServer(trackId, trashed) {
   const action = trashed ? "trash" : "restore";
-  fetch(`/api/jobs/${encodeURIComponent(trackId)}/${action}`, { method: "POST" })
+  return fetch(`/api/jobs/${encodeURIComponent(trackId)}/${action}`, { method: "POST" })
     .catch((e) => console.warn(`[catalog] could not ${action} ${trackId} on the server`, e));
 }
 
@@ -987,7 +1023,13 @@ function moveTrackToTrash(trackId) {
   // purgeTrash() does the same on permanent delete, for a job that errors
   // after being trashed but before it's purged.
   dismissFailuresByJobId(trackId);
-  syncTrashToServer(trackId, true);
+  // The server stops a job that is still importing when it is trashed, its
+  // files kept (#748). Ask for the queue again once it has, so the row goes now rather
+  // than whenever the next frame happens to arrive.
+  const wasInQueue = currentIds(getQueueSnapshot()).has(trackId);
+  syncTrashToServer(trackId, true).then(() => {
+    if (wasInQueue) refreshQueue();
+  });
   saveState();
   render();
 }
@@ -999,6 +1041,7 @@ function setCatalogView(view) {
   // the collapse button's aria-expanded is left claiming the sidebar is still
   // shut.
   if (catalogView !== "library") setSidebarCollapsed(false);
+  if (catalogView !== "trash") clearTrashSelection();
   render();
   // The lyrics panel (lyrics.js) draws itself; this is how it learns it is on
   // screen, without catalog.js importing it.
@@ -1553,20 +1596,143 @@ function wireRailTrashDrop() {
   });
 }
 
-function restoreTrackFromTrash(trackId) {
-  if (!tracks[trackId]) return;
+/** Take tracks back out of the Trash, with one save and one render however
+ *  many there are. Restore never queues a song again (#748): a stopped one
+ *  comes back stopped, with its Extract button. */
+function restoreTracksFromTrash(trackIds) {
   const trash = getTrashFolder();
-  if (!trash?.items.includes(trackId)) return;
-  trash.items = trash.items.filter((id) => id !== trackId);
+  const ids = trackIds.filter((id) => tracks[id] && trash?.items.includes(id));
+  if (!ids.length) return;
+  trash.items = trash.items.filter((id) => !ids.includes(id));
   let target = folders.find((f) => f.id !== TRASH_ID);
   if (!target) {
     target = makeFolder({ id: "f-unsorted", name: "Unsorted" });
     folders.unshift(target);
   }
-  if (!target.items.includes(trackId)) target.items.push(trackId);
-  syncTrashToServer(trackId, false);
+  for (const id of ids) {
+    _trashSelection.delete(id);
+    if (!target.items.includes(id)) target.items.push(id);
+    syncTrashToServer(id, false);
+  }
   saveState();
   render();
+}
+
+/** The rows a gesture on this one acts on: the whole selection when the row
+ *  is part of it, otherwise the row alone. */
+function trashTargets(trackId) {
+  return _trashSelection.has(trackId) ? [..._trashSelection] : [trackId];
+}
+
+function clearTrashSelection() {
+  _trashSelection.clear();
+  _trashAnchor = null;
+}
+
+function paintTrashSelection() {
+  for (const el of document.querySelectorAll(".cat-item.in-trash")) {
+    const selected = _trashSelection.has(el.dataset.id);
+    el.classList.toggle("selected", selected);
+    el.setAttribute("aria-selected", String(selected));
+  }
+}
+
+/** Click picks rows: alone, Ctrl (Cmd on a Mac) adds or removes one, Shift
+ *  takes the range from the last row picked, in the order on screen. */
+function selectTrashRow(trackId, e) {
+  if (e.shiftKey && _trashAnchor) {
+    const order = [...document.querySelectorAll(".cat-item.in-trash")].map((el) => el.dataset.id);
+    const from = order.indexOf(_trashAnchor);
+    const to = order.indexOf(trackId);
+    if (from !== -1 && to !== -1) {
+      if (!(e.ctrlKey || e.metaKey)) _trashSelection.clear();
+      const [a, b] = from < to ? [from, to] : [to, from];
+      for (const id of order.slice(a, b + 1)) _trashSelection.add(id);
+      paintTrashSelection();
+      return;
+    }
+  }
+  if (e.ctrlKey || e.metaKey) {
+    if (_trashSelection.has(trackId)) _trashSelection.delete(trackId);
+    else _trashSelection.add(trackId);
+  } else {
+    _trashSelection.clear();
+    _trashSelection.add(trackId);
+  }
+  _trashAnchor = trackId;
+  paintTrashSelection();
+}
+
+/** A Trash row: click selects, holding for TRASH_HOLD_MS restores it (or the
+ *  selection it belongs to), and dragging it onto Library still restores. A
+ *  click no longer opens the song: every hold let go early would do that. */
+function wireTrashRow(el, trackId) {
+  el.draggable = true;
+  el.tabIndex = 0;
+  el.style.setProperty("--hold-ms", `${TRASH_HOLD_MS}ms`);
+  let timer = null;
+  let restored = false;
+  // Every row the hold will restore fills together, so a selection shows as
+  // one gesture rather than only the row under the pointer.
+  let held = [];
+  const cancel = () => {
+    clearTimeout(timer);
+    timer = null;
+    for (const row of held) row.classList.remove("holding");
+    held = [];
+  };
+  const start = () => {
+    cancel();
+    restored = false;
+    const targets = new Set(trashTargets(trackId));
+    held = [...document.querySelectorAll(".cat-item.in-trash")].filter((row) => targets.has(row.dataset.id));
+    if (!held.includes(el)) held.push(el);
+    for (const row of held) row.classList.add("holding");
+    timer = setTimeout(() => {
+      timer = null;
+      restored = true;
+      for (const row of held) row.classList.remove("holding");
+      held = [];
+      restoreTracksFromTrash([...targets]);
+    }, TRASH_HOLD_MS);
+  };
+  el.addEventListener("pointerdown", (e) => {
+    // Ctrl and Shift are for picking rows, not for restoring them.
+    if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    start();
+  });
+  for (const type of ["pointerup", "pointerleave", "pointercancel"]) el.addEventListener(type, cancel);
+  el.addEventListener("keydown", (e) => {
+    if ((e.key === "Enter" || e.key === " ") && !e.repeat) {
+      e.preventDefault();
+      start();
+    }
+  });
+  el.addEventListener("keyup", (e) => {
+    if (e.key === "Enter" || e.key === " ") cancel();
+  });
+  el.addEventListener("click", (e) => {
+    if (restored) return;
+    selectTrashRow(trackId, e);
+  });
+  el.addEventListener("dragstart", (e) => {
+    cancel();
+    startDrag(trackId, el, e);
+  });
+  el.addEventListener("dragend", () => endDrag(el));
+}
+
+/** The Trash shows how full it is (#749): the reporter never noticed it was
+ *  there, so nothing told them their deleted songs were still on disk. */
+function updateTrashBadge(count = getTrashFolder()?.items.length ?? 0) {
+  const btn = document.querySelector(".rail-trash");
+  const badge = document.getElementById("trashBadge");
+  if (!btn || !badge) return;
+  badge.textContent = count > 99 ? "99+" : String(count);
+  badge.classList.toggle("hidden", count === 0);
+  const label = count ? i18nT("nav.trashWithCount", { count }) : i18nT("nav.trash");
+  btn.title = label;
+  btn.setAttribute("aria-label", label);
 }
 
 function wireRailLibraryDrop() {
@@ -1589,7 +1755,7 @@ function wireRailLibraryDrop() {
     const trackId = getDraggedTrackId(e);
     if (!trackId || !tracks[trackId]) return;
     e.preventDefault();
-    restoreTrackFromTrash(trackId);
+    restoreTracksFromTrash(trashTargets(trackId));
     setCatalogView("library");
   });
 }
@@ -1684,6 +1850,8 @@ function trackSublineHtml(track, { inTrash = false } = {}) {
     parts = [i18nT("job.processing")];
   } else if (track.status === "error") {
     parts = [i18nT("notifKind.importFailed")];
+  } else if (track.status === "stopped") {
+    parts = [i18nT("track.stopped")];
   } else {
     // Just the length. The stem count was here too, but every row carrying
     // "6 stems" says the same thing forty times over, and the now-playing card
@@ -1768,27 +1936,54 @@ function makeStripItem({ className = "", id, title, html, color, trackId }) {
   return item;
 }
 
+// A song stopped by the Trash keeps its files (#748). Restore brings it back
+// as it was, and this is the one way to run it again: the user decides when it
+// gets the GPU, never Restore and never a reload.
+function extractButtonHtml(track) {
+  const label = i18nT("track.extractAgainOf", { title: displayTitle(track.title) });
+  return `<button class="cat-extract" type="button" title="${esc(i18nT("track.extractAgain"))}"
+            aria-label="${esc(label)}">${esc(i18nT("track.extractAgain"))}</button>`;
+}
+
+async function extractStoppedTrack(trackId) {
+  try {
+    const res = await fetch(`/api/jobs/${encodeURIComponent(trackId)}/extract`, { method: "POST" });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      notifyFailure({ kind: "import", message: body.detail || i18nT("job.audioProcessingFailed") });
+      render();
+      return;
+    }
+    if (tracks[trackId]) tracks[trackId].status = "queued";
+    // Like any import (#747): it opens when done, if the studio is still empty.
+    armAutoOpen(trackId);
+    saveState();
+    render();
+    await refreshQueue();
+  } catch (e) {
+    console.warn("[catalog] could not extract", trackId, e);
+    render();
+  }
+}
+
 function renderTrackItem(trackId, { inTrash = false } = {}) {
   const track = tracks[trackId];
   if (!track) return null;
 
   const el = document.createElement("div");
   const isUnavailable = track.status === "unavailable";
-  el.className = `cat-item${trackId === _currentTrackId ? " active" : ""}${isUnavailable ? " unavailable" : ""}${!inTrash && track.favorite ? " is-fav" : ""}`;
+  el.className = `cat-item${trackId === _currentTrackId ? " active" : ""}${isUnavailable ? " unavailable" : ""}${!inTrash && track.favorite ? " is-fav" : ""}${!inTrash && track.status === "stopped" ? " is-stopped" : ""}${inTrash ? " in-trash" : ""}${inTrash && _trashSelection.has(trackId) ? " selected" : ""}`;
   el.dataset.id = trackId;
 
   el.innerHTML = `
     <div class="cat-thumb">${thumbHtml(track)}</div>
     <div class="cat-meta">
       <div class="cat-title">${esc(displayTitle(track.title))}</div>
-      <div class="cat-sub">${trackSublineHtml(track, { inTrash })}</div>
+      <div class="cat-sub">${trackSublineHtml(track, { inTrash })}</div>${inTrash ? `<div class="cat-sub trash-hint">${esc(i18nT("trash.holdToRestore"))}</div>` : ""}
     </div>
     <div class="cat-status${PROCESSING_STATUSES.has(track.status) ? " processing" : isUnavailable ? " unavailable" : ""}"></div>
-    ${inTrash ? "" : `<div class="cat-actions">${favButtonHtml(track)}<button class="cat-del" type="button" title="${esc(i18nT("track.moveToTrash"))}">
-      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <polyline points="3 6 5 6 21 6"></polyline>
-        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
-      </svg>
+    ${inTrash ? `<div class="trash-hold" aria-hidden="true"></div>` : `<div class="cat-actions">${track.status === "stopped" ? extractButtonHtml(track) : ""}${favButtonHtml(track)}<button class="cat-del" type="button" title="${esc(i18nT("track.moveToTrash"))}">
+      ${TRASH_ICON_SVG}
     </button></div>`}
   `;
   el.querySelector(".cat-del")?.setAttribute("aria-label", i18nT("track.moveTitleToTrash", { title: track.title ?? i18nT("track.unknown") }));
@@ -1797,9 +1992,20 @@ function renderTrackItem(trackId, { inTrash = false } = {}) {
     e.stopPropagation();
     moveTrackToTrash(trackId);
   });
+  el.querySelector(".cat-extract")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    e.currentTarget.disabled = true;
+    extractStoppedTrack(trackId);
+  });
   wireFavButton(el, trackId);
 
-  wireTrackDragAndLoad(el, trackId);
+  if (inTrash) {
+    el.title = i18nT("trash.holdToRestore");
+    el.setAttribute("aria-selected", String(_trashSelection.has(trackId)));
+    wireTrashRow(el, trackId);
+  } else {
+    wireTrackDragAndLoad(el, trackId);
+  }
 
   return el;
 }
@@ -2025,6 +2231,8 @@ function render() {
 
   const trash = getTrashFolder();
   const trashIds = new Set(trash?.items || []);
+  for (const id of _trashSelection) if (!trashIds.has(id)) _trashSelection.delete(id);
+  updateTrashBadge(trashIds.size);
   const isTrashView = catalogView === "trash";
   const isFavoritesView = catalogView === "favorites";
   const isQueueView = catalogView === "queue";
@@ -2232,6 +2440,25 @@ function decorateRow(el, rowState) {
   if (fill) fill.style.width = `${Math.round(rowState.progress * 100)}%`;
 }
 
+/** Remember that this import was started with the studio as it is now. Imports
+ *  never take the studio while they run (#747); this is what lets the first one
+ *  to finish open itself, but only while the studio is still empty and the user
+ *  has not opened anything since. */
+export function armAutoOpen(jobId) {
+  _autoOpenTokens.set(jobId, _loadTrackToken);
+}
+
+/** True when the studio shows no track and no load is under way. Either engine
+ *  counts: the Web Audio path sets audioEngine, the streaming path sets
+ *  multitrack. A load in flight has bumped the token before it has an engine.
+ *  "Sync again" holds the studio through foregroundJobId without either: it
+ *  tears the player down and shows its own overlay, so it counts as busy too. */
+function shouldAutoOpen(jobId) {
+  const armedAt = _autoOpenTokens.get(jobId);
+  _autoOpenTokens.delete(jobId);
+  return armedAt === _loadTrackToken && !audioEngine && !multitrack && !foregroundJobId;
+}
+
 /** A background import has finished (or failed, or was cancelled). It has no
  *  per-job stream, so fetch its final state once and complete its library entry
  *  -- stems, duration and analysis all land here, which is what makes the track
@@ -2248,6 +2475,7 @@ async function completeSettledJob(jobId) {
     }
     const state = await res.json();
     if (state.status === "cancelled") {
+      _autoOpenTokens.delete(jobId);
       // Nothing was produced; drop the placeholder row rather than leaving a
       // track that can never be loaded.
       delete tracks[jobId];
@@ -2282,7 +2510,14 @@ async function completeSettledJob(jobId) {
     const finalState = state.status === "done" ? await runVocalSplitIfWanted(state) : state;
     const track = stateMetadataToTrack(finalState, { ...existing, id: jobId });
     track.id = jobId;
+    // A server that sends "work" looked for it while the job ran, so the track
+    // that opens next never needs to ask again (#747: every import lands here).
+    if (finalState.status === "done" && "work" in finalState) track.workChecked = true;
     addTrackToLibrary(track);
+    // Checked after the split so the stems it makes are there when it opens,
+    // and through the library's own loader so it behaves like a click on the row.
+    if (finalState.status === "done" && shouldAutoOpen(jobId)) loadTrackIntoStudio(jobId);
+    else _autoOpenTokens.delete(jobId);
   } catch (e) {
     console.warn("[catalog] could not finish background job", jobId, e);
   }
@@ -2329,9 +2564,7 @@ function queueRowHtml({ job, running }, place, { paused = false } = {}) {
       </button>`}
       <button class="queue-cancel" type="button" title="${esc(i18nT("queue.cancelImport"))}"
               aria-label="${esc(i18nT("queue.cancelImportOf", { title: displayTitle(job.title || job.source_url) }))}">
-        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
-          <path d="M18 6 6 18 M6 6l12 12"></path>
-        </svg>
+        ${TRASH_ICON_SVG}
       </button>
     </div>`;
 }
@@ -3307,13 +3540,23 @@ function friendGlyph(url) {
   return svg;
 }
 
-// One partner card: image (or initial badge), name, role, link glyph.
-function friendCard(f) {
+/** A link that opens outside the app, as every partner link does. */
+function friendLink(url) {
   const a = document.createElement("a");
-  a.className = "lib-friend";
-  a.href = f.url;
+  a.href = url;
   a.target = "_blank";
   a.rel = "noopener noreferrer";
+  return a;
+}
+
+// One partner card: image (or initial badge), name, role, link glyph. A card
+// with one `url` is a link as a whole. A card with several `links` cannot be:
+// a link inside a link is invalid HTML, and which one a click follows is up to
+// the browser. So it is a plain card with one labelled link per destination.
+function friendCard(f) {
+  const multi = Array.isArray(f.links) && f.links.length > 0;
+  const a = multi ? document.createElement("div") : friendLink(f.url);
+  a.className = multi ? "lib-friend lib-friend-multi" : "lib-friend";
   a.title = f.name;
 
   // A monogram badge (first initial) keeps the card on-brand when an entry has
@@ -3359,7 +3602,20 @@ function friendCard(f) {
     a.appendChild(role);
   }
 
-  a.appendChild(friendGlyph(f.url));
+  if (!multi) {
+    a.appendChild(friendGlyph(f.url));
+    return a;
+  }
+  const row = document.createElement("span");
+  row.className = "lib-friend-links";
+  for (const link of f.links) {
+    const l = friendLink(link.url);
+    l.className = "lib-friend-pill";
+    l.title = `${f.name}: ${link.label}`;
+    l.append(friendGlyph(link.url), link.label);
+    row.appendChild(l);
+  }
+  a.appendChild(row);
   return a;
 }
 
@@ -3540,7 +3796,24 @@ async function syncWithServer() {
       if (favBtn && current) paintFavButton(favBtn, Boolean(current.favorite));
     }
     reconcileAvailability(jobs);
+    settleStaleProcessingTracks();
   } catch (e) { console.warn("[catalog] failed to load jobs from backend:", e); }
+}
+
+/**
+ * Ask the server where every track this side still calls "processing" stands.
+ *
+ * A job is only settled here when it leaves the queue while the page watches
+ * it. One that stopped, failed or finished while the app was closed never left
+ * the queue in front of this page, so its row said "processing" for good: the
+ * song trashed mid-extraction in #748 sat in the Trash that way after a
+ * restart. completeSettledJob takes whatever the server says, so a job that
+ * really is still waiting just keeps its status.
+ */
+function settleStaleProcessingTracks() {
+  for (const [id, track] of Object.entries(tracks)) {
+    if (PROCESSING_STATUSES.has(track.status)) completeSettledJob(id);
+  }
 }
 
 // ─── Settings menu + Library editor ───
@@ -4903,7 +5176,7 @@ async function waitForJobTerminal(jobId) {
       const r = await fetch(`/api/jobs/${jobId}`, { cache: "no-store" });
       if (r.status === 404) return;
       const s = await r.json();
-      if (s.status === "done" || s.status === "error" || s.status === "cancelled") return;
+      if (["done", "error", "cancelled", "stopped"].includes(s.status)) return;
     } catch { /* transient — keep waiting */ }
   }
 }
