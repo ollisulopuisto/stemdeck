@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 from pathlib import Path
 
 from app.core.config import DEMUCS_MODEL
@@ -90,11 +91,16 @@ def main() -> None:
     device = sys.argv[1] if len(sys.argv) > 1 else "cpu"
     arm_parent_watchdog()
 
+    load_start = time.monotonic()
     from demucs.pretrained import get_model
 
     model = get_model(DEMUCS_MODEL)
     model.eval()
     model.cpu()
+    # Tells the parent how long the torch import + model load took, so the
+    # time prewarm hides is measurable on its own.
+    sys.stderr.write(f"@@READY@@{time.monotonic() - load_start:.3f}\n")
+    sys.stderr.flush()
 
     for line in sys.stdin:
         line = line.strip()
