@@ -52,3 +52,23 @@ CVE-2026-63374
 # bump the next time the lock moves for another reason, and drop these then.
 CVE-2026-97687
 CVE-2026-97689
+
+# GHSA-6q48-6c7w-9gw2: certifi bundled emSign root CAs. Fixed in 2026.10.18; lock pins 2026.4.22.
+GHSA-6q48-6c7w-9gw2
+
+# CVE-2026-112940: filelock arbitrary file overwrite. Fixed in 4.2.1; lock pins 3.29.0.
+CVE-2026-112940
+
+# CVE-2026-104851: fsspec arbitrary code execution via ReferenceFileSystem. Fixed in 2026.6.0; lock pins 2026.3.0.
+CVE-2026-104851
+
+# CVE-2026-106439, CVE-2026-106441, CVE-2026-106442: hydra-core arbitrary code execution. Fixed in 1.3.6+; lock pins 1.3.5.
+CVE-2026-106439
+CVE-2026-106441
+CVE-2026-106442
+
+# CVE-2026-27489, CVE-2026-28500, CVE-2026-34445, CVE-2026-49114: onnx path traversal / file write. Fixed in 1.21.0; lock pins 1.19.0.
+CVE-2026-27489
+CVE-2026-28500
+CVE-2026-34445
+CVE-2026-49114
