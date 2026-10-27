@@ -67,6 +67,10 @@ dependencies = [
     # Pure-Python QR code generator used by the /api/qr endpoint (server
     # access QR codes in the desktop settings panel).
     "segno>=1.6",
+    # CVE floor bump for Pillow vulnerabilities (CVE-2026-66, CVE-2026-61,
+    # CVE-2026-44, CVE-2026-35, CVE-2026-76) fixed in 13.0.0. Transitive dep
+    # via torchvision/matplotlib/librosa; pin floor to pull in the fix.
+    "pillow>=13.0.0",
     # On-demand lead/backing vocal split (#275). Ships with UVR-MDX-NET
     # Karaoke 2 (ONNX) as the default model -- see docs/models.md for why the
     # torch-native alternative (a community roformer checkpoint) was rejected
