@@ -313,6 +313,10 @@ PLAYLIST_MAX_ITEMS = max(1, min(200, _env_int("STEMDECK_PLAYLIST_MAX_ITEMS", 50)
 TIMEOUT_FFMPEG = _env_int("STEMDECK_TIMEOUT_FFMPEG", 300)
 TIMEOUT_ANALYZE = _env_int("STEMDECK_TIMEOUT_ANALYZE", 120)
 TIMEOUT_DEMUCS_STALL = _env_int("STEMDECK_TIMEOUT_DEMUCS_STALL", 1800)
+# Spawn the demucs worker while the source is still downloading (separate.prewarm).
+# Set to 0 to spawn it only when separation starts, e.g. in a memory-capped
+# container where ~350 MB of resident model during the download matters.
+PREWARM_WORKER = _env_int("STEMDECK_PREWARM", 1) != 0
 # Automatic functional-section analysis. Inference stays on CPU because the
 # persistent Demucs worker deliberately keeps its model resident on the chosen
 # accelerator between jobs; loading a second model beside it would make VRAM

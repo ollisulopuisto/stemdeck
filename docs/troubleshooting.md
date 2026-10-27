@@ -6,7 +6,7 @@
 
 **`WARNING: [youtube] No supported JavaScript runtime`:** install deno (`brew install deno` on macOS) and restart. Downloads still work without it but may pick suboptimal formats.
 
-**First separation is very slow:** Demucs downloads `htdemucs_6s` weights (~170 MB) on first run; cached afterwards.
+**First separation is very slow:** Demucs downloads `htdemucs_6s` weights (~170 MB) on first run; cached afterwards. The separation worker starts and loads the model while your source is still downloading or transcoding, and stays warm across consecutive jobs. In each job's `metadata.json`, `separate_model_load` is how long the worker took to load the model (fresh workers only) and `separate_startup` is what was left to wait for after separation started.
 
 **Demucs runs on CPU only:** check the startup log for `device=mps` or `device=cuda`. If you see `cpu`, your torch install may be CPU-only.
 
