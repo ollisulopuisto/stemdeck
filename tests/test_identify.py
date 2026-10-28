@@ -16,8 +16,8 @@ import threading
 import time
 import urllib.error
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 
