@@ -74,14 +74,34 @@ A cleanly-licensed roformer alternative (Kimberley Jensen's
 `Mel-Band-Roformer-Vocal-Model`) was also checked and found to have no
 LICENSE file despite a claim to the contrary surfacing in a web search.
 
-Since StemDeck is free/non-commercial, the practical risk of using an
-unlicensed-but-freely-shared community checkpoint is low -- but a
-Boosty-paywall origin is a step past "unlicensed," suggesting the author did
-not intend it for free redistribution at all, and its already-dead HF mirror
-makes it an unreliable thing to depend on regardless of the licensing
-question. `STEMDECK_KARAOKE_MODEL` remains available as an env override for a
-deployment that wants to accept that risk itself.
+Its licence and provenance stay unresolved: no licence statement was found for
+the weights, the Boosty-paywall origin is a step past "unlicensed" and suggests
+the author may not have intended free redistribution, and the unauthenticated
+Hugging Face API request for the mirror returned 401 when checked on 28 October
+2026 (that shows the endpoint was not reachable that way, not that the source
+was removed). Nothing here grants any right to use, redistribute or use the
+weights commercially.
 
+### Opt-in: aufr33/viperx karaoke for lead/backing
+
+Selected, per run of the server, with:
+
+```
+STEMDECK_KARAOKE_MODEL=mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956.ckpt \
+  uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+The default stays Karaoke 2. The checkpoint is fetched by audio-separator on the
+first lead/backing split, not at setup or startup, and is loaded with restricted
+unpickling (see the note under BS-Roformer-SW below). Evidence for the choice is
+audio-separator's own score table
+(https://raw.githubusercontent.com/nomadkaraoke/python-audio-separator/main/audio_separator/models-scores.json):
+median vocals SDR 8.45 for this checkpoint (target stem vocals) against 5.43 for
+Karaoke 2 (target stem instrumental), and 14.65 against 14.77 for the
+instrumental stem. The two rows have different target stems and the table is
+audio-separator's own run, so read it as a direction, not a measured gain. Its
+output labels (`vocals`, `instrumental`) match the worker's mapping according to
+that table's stem list; that has not been run on real audio here.
 
 ## BS-Roformer-SW (opt-in six-stem engine)
 
