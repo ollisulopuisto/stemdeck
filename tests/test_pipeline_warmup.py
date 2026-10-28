@@ -62,3 +62,23 @@ def test_section_worker_disables_hugging_face_symlinks():
     module = importlib.import_module("app.pipeline.section_worker")
 
     assert "HF_HUB_DISABLE_SYMLINKS" in module.os.environ
+
+
+def test_vocal_split_warmup_skips_downloading_a_torch_checkpoint(monkeypatch, capsys):
+    """An overridden .ckpt must not be fetched at setup (it loads on first use)."""
+    monkeypatch.setattr(warmup, "VOCAL_SPLIT_MODEL", "some_karaoke.ckpt")
+    import sys
+    import types
+
+    boom = types.ModuleType("audio_separator.separator")
+
+    class Separator:
+        def __init__(self, *a, **k):
+            raise AssertionError("must not construct a Separator for a .ckpt at setup")
+
+    boom.Separator = Separator
+    monkeypatch.setitem(sys.modules, "audio_separator", types.ModuleType("audio_separator"))
+    monkeypatch.setitem(sys.modules, "audio_separator.separator", boom)
+
+    warmup._warm_vocal_split()
+    assert "WARMUP_SKIPPED vocal_split some_karaoke.ckpt" in capsys.readouterr().out

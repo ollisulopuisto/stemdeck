@@ -42,6 +42,7 @@ from app.core.config import (
     TRANSCRIBE_MODEL_CPU,
     TRANSCRIBE_MODEL_GPU,
     VOCAL_SPLIT_MODEL,
+    is_pickled_checkpoint,
 )
 
 
@@ -63,6 +64,15 @@ def _warm_beat_this() -> None:
 
 
 def _warm_vocal_split() -> None:
+    # An overridden torch checkpoint (STEMDECK_KARAOKE_MODEL=*.ckpt) is not
+    # fetched at setup: it may be unlicensed or unverified, and the split
+    # worker loads it, with restricted unpickling, only when a user asks for a
+    # split. The default .onnx model keeps its setup-time download.
+    if is_pickled_checkpoint(VOCAL_SPLIT_MODEL):
+        print(
+            f"WARMUP_SKIPPED vocal_split {VOCAL_SPLIT_MODEL} (downloaded on first use)", flush=True
+        )
+        return
     from audio_separator.separator import Separator
 
     from app.core.model_cache import load_or_heal, vocal_split_artifacts
