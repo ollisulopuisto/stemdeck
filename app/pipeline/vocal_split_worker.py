@@ -23,7 +23,7 @@ import json
 import os
 import sys
 
-from app.core.config import VOCAL_SPLIT_MODEL
+from app.core.config import VOCAL_SPLIT_MODEL, is_pickled_checkpoint
 from app.core.process import arm_parent_watchdog
 
 
@@ -34,6 +34,14 @@ def _run(device: str, vocals_path: str, out_dir: str) -> None:
         # provider when the caller explicitly resolved to "cpu" (matches the
         # separation stage's own device policy in app.core.settings).
         os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
+
+    if is_pickled_checkpoint(VOCAL_SPLIT_MODEL):
+        # A .ckpt is a pickle from a third-party trainer. audio-separator's
+        # Roformer loader calls torch.load without weights_only, so do not
+        # rest on torch's default (see safe_load.py).
+        from app.pipeline.safe_load import require_weights_only_loading
+
+        require_weights_only_loading()
 
     from audio_separator.separator import Separator
 

@@ -151,3 +151,10 @@ Selected with `STEMDECK_SEPARATION_ENGINE=roformer-sw`. Default stays Demucs
 - **Run it**: `STEMDECK_SEPARATION_ENGINE=roformer-sw STEMDECK_ROFORMER_SW_ACCEPT=1 uv run uvicorn app.main:app --host 127.0.0.1 --port 8000`
   (`/api/health` then reports `separation_engine` and `separation_model`).
 - Lead/backing split is independent and unchanged (`STEMDECK_KARAOKE_MODEL`).
+- A torch checkpoint chosen with `STEMDECK_KARAOKE_MODEL` (any `.ckpt`, `.pth`
+  or `.pt`) is loaded with restricted unpickling (`weights_only`), which is
+  narrower than default unpickling and not proof against every code-execution,
+  resource or parser vulnerability. It is not downloaded at setup or startup
+  (`warmup` prints `WARMUP_SKIPPED vocal_split ...`); the split worker fetches it
+  on the first split. The default `.onnx` model is unchanged and still fetched
+  at setup. A failed split now names the model in its error.
