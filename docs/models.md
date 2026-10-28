@@ -81,3 +81,73 @@ not intend it for free redistribution at all, and its already-dead HF mirror
 makes it an unreliable thing to depend on regardless of the licensing
 question. `STEMDECK_KARAOKE_MODEL` remains available as an env override for a
 deployment that wants to accept that risk itself.
+
+
+## BS-Roformer-SW (opt-in six-stem engine)
+
+Selected with `STEMDECK_SEPARATION_ENGINE=roformer-sw`. Default stays Demucs
+`htdemucs_6s`; nothing changes unless this is set.
+
+- **Runtime**: `audio-separator` 0.38 to 0.45 (0.38 is the first release listing
+  the model). `pyproject.toml` declares that range and `uv.lock` pins 0.45.0 on
+  Linux, Windows and Apple Silicon, with numpy 2 and torch 2.6; plain `uv sync`
+  is enough. Intel macOS keeps its torch 2.2 / numpy 1.26 pins and does not get
+  audio-separator at all, so the Roformer engine and the lead/backing split are
+  unavailable there, as before. 0.46+ needs torch 2.13 on Apple Silicon and is
+  excluded until that pin is raised on purpose. The raised range also changes
+  the lead/backing split's audio-separator from 0.30.2 to 0.45.0; that path was
+  not re-run end to end (see below). Every audio-separator release in that range
+  declares `onnx-weekly` and `onnx2torch-py313` (which also needs `onnx-weekly`)
+  as hard dependencies, so the lock carries a nightly `onnx-weekly` build instead
+  of the stable `onnx` the old lock had. No stable release in 0.38 to 0.45
+  avoids it, and no override was added.
+- **Checkpoint**: `BS-Roformer-SW.ckpt` (about 700 MB) and
+  `BS-Roformer-SW.yaml`, fetched by audio-separator from
+  `github.com/nomadkaraoke/python-audio-separator/releases/download/model-configs/`.
+  Not bundled, and not fetched at startup or by warmup: only when a job runs
+  with the engine selected and `STEMDECK_ROFORMER_SW_ACCEPT=1`.
+- **Stems**: bass, drums, other, vocals, guitar, piano, written under the same
+  names the Demucs engine produces as 16-bit WAV. audio-separator rescales every
+  stem on its own and no option turns that off, so the worker replaces its
+  normalise and write steps: stems are written as float32 with no rescaling,
+  then one common gain (1/peak of the loudest stem, only if a stem exceeds full
+  scale) is applied to all of them. Relative levels between stems are unchanged
+  and their sum still reconstructs the separated mix. The replacement targets
+  audio-separator 0.38 to 0.45 internals and the worker refuses to run if they
+  are not there.
+- **Loading the checkpoint**: `.ckpt` files are pickles. audio-separator's
+  Roformer loader calls `torch.load` without `weights_only`, so safety would
+  otherwise depend on torch's default (True from torch 2.6). The worker passes
+  `weights_only=True` explicitly, refuses torch older than 2.6, and refuses to
+  run if `TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD` is set. A test shows a pickle with a
+  code-executing payload is rejected. Restricted loading is narrower than
+  default unpickling; it is not proof against every code-execution, resource or
+  parser vulnerability, and it does not make the weights trustworthy. The
+  yaml next to it is read with `yaml.FullLoader` by audio-separator (it contains
+  `!!python/tuple`), which is less strict than `safe_load`; it is fetched from
+  the same release as the checkpoint.
+- **Licence: unresolved.** The weights have no stated licence and the trainer
+  is unverified (the original `jarredou` Hugging Face account is gone; the
+  current mirror lists `license: unknown`). The MIT licence of the surrounding
+  code does not cover them. See
+  https://github.com/openmirlab/bs-roformer-infer/issues/3. Do not redistribute
+  them or ship them in an installer without a written statement from the
+  trainer.
+- **Quality evidence** (MVSep Multisong SDR, vendor benchmark of its own hosted
+  models, not independently replicated): SW vocals 11.30, bass 14.62,
+  drums 14.11, other 8.71, guitar 9.05, piano 7.83
+  (https://www.mvsep.com/quality_checker/entry/8374); `htdemucs_6s` vocals
+  8.18, bass 11.42, drums 10.59, other 2.64
+  (https://www.mvsep.com/quality_checker/multisong_leaderboard?page=7).
+  Guitar for `htdemucs_6s` is a separate run with other settings (5.25,
+  https://www.mvsep.com/quality_checker/entry/6733), and the piano comparison
+  MVSep publishes (Demucs 6s 2.23 vs SW 7.83) is a different validation set,
+  so those two are directional only.
+- **Not verified**: any real separation output (the checkpoint downloads and
+  loads, but inference was killed by out-of-memory on a 1 GB test machine, so
+  nothing was produced or listened to; the lead/backing ONNX model hit the same
+  limit on a 3-second clip), Mac MPS behaviour, speed and memory (the model is
+  heavy; it did not fit in a 1 GB, 2-CPU test machine), and how it sounds.
+- **Run it**: `STEMDECK_SEPARATION_ENGINE=roformer-sw STEMDECK_ROFORMER_SW_ACCEPT=1 uv run uvicorn app.main:app --host 127.0.0.1 --port 8000`
+  (`/api/health` then reports `separation_engine` and `separation_model`).
+- Lead/backing split is independent and unchanged (`STEMDECK_KARAOKE_MODEL`).

@@ -33,9 +33,11 @@ from app.core.config import (
     HTTPS_PORT,
     JOBS_DIR,
     LOGS_DIR,
+    SEPARATION_ENGINE,
     SSL_CERTFILE,
     SSL_KEYFILE,
     STATIC_DIR,
+    active_separation_model,
     available_torch_devices,
     configure_portable_environment,
     ensure_runtime_dirs,
@@ -315,6 +317,8 @@ def health() -> dict[str, object]:
         "version": app_version(),
         "ffmpeg_configured": FFMPEG_BIN.is_file(),
         "demucs_model": DEMUCS_MODEL,
+        "separation_engine": SEPARATION_ENGINE,
+        "separation_model": active_separation_model(),
         "demucs_device": get_demucs_device(),
         # Who is answering. The desktop shell spawns this backend and then polls
         # this endpoint to know it came up -- but a 200 alone only proves

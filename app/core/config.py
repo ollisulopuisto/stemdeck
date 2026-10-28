@@ -291,6 +291,36 @@ def js_solver_available() -> bool:
 
 
 DEMUCS_MODEL = os.environ.get("STEMDECK_DEMUCS_MODEL", "htdemucs_6s").strip() or "htdemucs_6s"
+# Separation engine. "demucs" (default) is the persistent htdemucs_6s worker.
+# "roformer-sw" is an opt-in six-stem BS-Roformer-SW run through audio-separator
+# (app/pipeline/roformer_worker.py). There is no silent fallback between them:
+# a failing engine fails the job and names itself in the error. The SW weights
+# carry no stated licence and have unverified provenance, so they are never
+# downloaded until STEMDECK_ROFORMER_SW_ACCEPT=1 is set too (docs/models.md).
+SEPARATION_ENGINE = (
+    os.environ.get("STEMDECK_SEPARATION_ENGINE", "demucs").strip().lower() or "demucs"
+)
+if SEPARATION_ENGINE not in ("demucs", "roformer-sw"):
+    raise RuntimeError(
+        f"STEMDECK_SEPARATION_ENGINE={SEPARATION_ENGINE!r} is not supported "
+        "(use 'demucs' or 'roformer-sw')"
+    )
+ROFORMER_SW_MODEL = "BS-Roformer-SW.ckpt"
+ROFORMER_SW_ACCEPTED = os.environ.get("STEMDECK_ROFORMER_SW_ACCEPT", "").strip() == "1"
+# Directory name used for the intermediate stems of the roformer engine.
+ROFORMER_OUT_DIRNAME = "bs-roformer-sw"
+ROFORMER_SW_NOTICE = (
+    "BS-Roformer-SW (BS-Roformer-SW.ckpt) has no stated licence and its trainer "
+    "is unverified: the code around it is MIT, the weights are not covered by "
+    "that. Set STEMDECK_ROFORMER_SW_ACCEPT=1 to download and use it anyway."
+)
+
+
+def active_separation_model() -> str:
+    """The model that actually separates jobs, for logs/health/failure files."""
+    return ROFORMER_SW_MODEL if SEPARATION_ENGINE == "roformer-sw" else DEMUCS_MODEL
+
+
 MAX_DURATION_SEC = max(60, _env_int("STEMDECK_MAX_DURATION_SEC", 1200))  # 20 min default
 JOB_TTL_SECONDS = max(300, _env_int("STEMDECK_JOB_TTL_SECONDS", 24 * 3600))  # 24 h default
 # TTL for quarantined failed-job dirs (jobs/failed/<id>, kept for diagnostics).

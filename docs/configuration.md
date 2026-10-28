@@ -6,6 +6,8 @@
 |---|---|---|
 | `STEMDECK_DEMUCS_DEVICE` | auto | Force Torch device: `cuda`, `mps`, or `cpu`. |
 | `STEMDECK_DEMUCS_MODEL` | `htdemucs_6s` | Demucs model name. |
+| `STEMDECK_SEPARATION_ENGINE` | `demucs` | `demucs` or `roformer-sw` (opt-in six-stem BS-Roformer-SW; see [models.md](models.md)). No fallback between them: a failing engine fails the job. |
+| `STEMDECK_ROFORMER_SW_ACCEPT` | (unset) | Must be `1` for `roformer-sw` to download or run. The SW weights have no stated licence. |
 | `STEMDECK_JOBS_DIR` | `./jobs` | Where job directories land. |
 | `STEMDECK_DATA_DIR` | (none) | Portable mode root; sets all sub-dirs below to live inside it. |
 | `STEMDECK_CACHE_DIR` | `<data>/cache` | Torch model cache directory. |

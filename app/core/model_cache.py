@@ -132,3 +132,18 @@ def vocal_split_artifacts(models_dir: Path, model_file: str) -> list[Path]:
         root / "vr_model_data.json",
         root / "mdx_model_data.json",
     ]
+
+
+def roformer_artifacts(models_dir: Path, model_file: str) -> list[Path]:
+    """The BS-Roformer-SW checkpoint, its yaml, and the metadata index.
+
+    Same reasoning as vocal_split_artifacts: a truncated .ckpt is accepted as
+    present by audio-separator, so heal deletes these and retries once.
+    """
+    root = models_dir / "audio-separator"
+    return [
+        root / model_file,
+        root / model_file.replace(".ckpt", ".yaml"),
+        root / "vr_model_data.json",
+        root / "mdx_model_data.json",
+    ]

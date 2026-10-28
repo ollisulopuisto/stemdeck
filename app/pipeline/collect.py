@@ -11,6 +11,7 @@ from app.core.config import (
     DEMUCS_MODEL,
     FAILED_TTL_SECONDS,
     JOB_TTL_SECONDS,
+    ROFORMER_OUT_DIRNAME,
     STEM_NAMES,
     TIMEOUT_FFMPEG,
     ffmpeg_executable,
@@ -108,8 +109,9 @@ def collect(job: Job, stems_root: Path, job_dir: Path) -> list[str]:
             shutil.move(str(src), target_dir / f"{name}.wav")
             found.append(name)
     _rmtree(job_dir / DEMUCS_MODEL)
+    _rmtree(job_dir / ROFORMER_OUT_DIRNAME)
     if not found:
-        raise RuntimeError("no stems produced by demucs")
+        raise RuntimeError("no stems produced by the separation engine")
     return found
 
 

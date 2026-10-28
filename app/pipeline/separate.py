@@ -11,7 +11,7 @@ import threading
 import time
 from pathlib import Path
 
-from app.core.config import DEMUCS_MODEL, PREWARM_WORKER, TIMEOUT_DEMUCS_STALL
+from app.core.config import DEMUCS_MODEL, PREWARM_WORKER, SEPARATION_ENGINE, TIMEOUT_DEMUCS_STALL
 from app.core.models import Job, JobCancelled, _set
 from app.core.registry import set_proc
 from app.core.settings import get_demucs_device, get_separation_quality
@@ -144,7 +144,7 @@ def prewarm(device: str | None = None) -> None:
     Best-effort by design: a spawn problem here is not this stage's to
     report. The real dispatch owns error handling (and the CPU fallback),
     and it will hit the same problem with a job to attach it to."""
-    if not PREWARM_WORKER:
+    if not PREWARM_WORKER or SEPARATION_ENGINE != "demucs":
         return
     try:
         _get_worker(device or get_demucs_device())
@@ -311,7 +311,14 @@ def separate(job: Job, source: Path, job_dir: Path) -> Path:
     # the completion summary / metadata / failure quarantine.
     device = get_demucs_device()
     job.compute_device = device
-    logger.info("[%s] separating on device=%s", job.id, device)
+    logger.info("[%s] separating on device=%s engine=%s", job.id, device, SEPARATION_ENGINE)
+
+    if SEPARATION_ENGINE == "roformer-sw":
+        # Opt-in engine. No CPU retry and no demucs fallback: a failure here is
+        # a BS-Roformer-SW failure and is reported as one (see roformer.py).
+        from app.pipeline.roformer import separate_roformer
+
+        return separate_roformer(job, source, job_dir, device)
 
     rc, tail = _run_demucs(job, source, job_dir, device)
 

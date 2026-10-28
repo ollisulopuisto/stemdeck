@@ -11,11 +11,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app.core.config import (
-    DEMUCS_MODEL,
     IDENTIFY_GRACE_SEC,
     LYRICS_IDENTITY_WAIT_SEC,
     LYRICS_LOOKUP_GRACE_SEC,
     TIMEOUT_FFMPEG,
+    active_separation_model,
 )
 from app.core.models import Job, JobCancelled, _set, settle_cancelled
 from app.core.redact import redact
@@ -416,7 +416,7 @@ def _quarantine_failed_job(job: Job, job_dir: Path, jobs_dir: Path, exc: Excepti
             f"source: {job.source_url or '(unknown)'}",
             f"stage: {job.stage_message}",
             f"device: {job.compute_device or getattr(exc, 'device', None) or '(not reached)'}",
-            f"model: {DEMUCS_MODEL}",
+            f"model: {active_separation_model()}",
             f"cause: {cause}",
             f"timings: {json.dumps(job.stage_timings) if job.stage_timings else '(none)'}",
             f"exception: {redact(repr(exc))}",
@@ -503,7 +503,7 @@ async def _run_async(
         "[%s] done device=%s model=%s %s total=%.1fs",
         job.id,
         job.compute_device or "n/a",
-        DEMUCS_MODEL,
+        active_separation_model(),
         " ".join(f"{k}={v}s" for k, v in t.items()),
         sum(t.values()),
     )

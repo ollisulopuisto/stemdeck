@@ -86,7 +86,8 @@ dependencies = [
     # this wheel is NOT CPU-only: it ships CoreMLExecutionProvider, and
     # audio-separator auto-enables it (plus torch MPS for its STFT work) --
     # verified on an M2 runtime pack. Do not add a package swap for macOS.
-    "audio-separator>=0.24; sys_platform != 'darwin' or platform_machine != 'x86_64'",
+    "audio-separator>=0.38,<0.46; sys_platform != 'darwin'",
+    "audio-separator>=0.38,<0.46; sys_platform == 'darwin' and platform_machine != 'x86_64'",
     "onnxruntime>=1.19; sys_platform != 'darwin' or platform_machine != 'x86_64'",
     # audio-separator imports this directly; librosa<1 pulls it in transitively
     # today, but pin it explicitly so this survives an eventual librosa 1.x move
