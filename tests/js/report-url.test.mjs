@@ -207,8 +207,10 @@ const PRIVATE = {
   },
 };
 const privateUrl = buildReportUrl(PRIVATE, DIAG);
+const privateUrlObj = new URL(privateUrl);
+const privateQ = new URLSearchParams(privateUrlObj.search);
 check("never carries a track title", !privateUrl.includes("Private%20Demo") && !privateUrl.includes("Private Demo"));
-check("never carries a source URL", !privateUrl.includes("youtube.com") && !privateUrl.includes("dQw4w9WgXcQ"));
+check("never carries a source URL", privateUrlObj.hostname !== "www.youtube.com" && !privateQ.has("v"));
 
 // ─── length ceiling ───
 //

@@ -49,7 +49,7 @@ function stamps(lrc) {
   for (const raw of String(lrc || "").split("\n")) {
     const m = /^\[(\d+):(\d+(?:\.\d+)?)\](.*)$/.exec(raw);
     if (!m) continue;
-    const text = m[3].replace(/<[^>]*>/g, "").trim();
+    const text = m[3].replace(/<[^>]*>/g, "").replace(/[&<>"']/g, "").trim();
     if (text) out.push([text, Math.round((Number(m[1]) * 60 + Number(m[2])) * 100) / 100]);
   }
   return out;

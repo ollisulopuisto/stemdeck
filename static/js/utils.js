@@ -147,4 +147,17 @@ export function isReimportableSource(sourceUrl) {
   return !!sourceUrl && !sourceUrl.startsWith("local:");
 }
 
+// Hostname of an absolute http(s) URL, or null otherwise. Used instead of
+// `sourceUrl.includes("youtube.com")` so a URL like
+// https://evil.com/https://youtube.com/... cannot masquerade as YouTube:
+// only the hostname is matched, never a substring anywhere in the URL.
+export function hostOf(sourceUrl) {
+  if (!sourceUrl || sourceUrl.startsWith("local:")) return null;
+  try {
+    return new URL(sourceUrl).hostname;
+  } catch {
+    return null;
+  }
+}
+
 export const $ = (id) => document.getElementById(id);

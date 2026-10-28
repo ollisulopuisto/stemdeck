@@ -12,7 +12,7 @@ import {
   queueCount, queueRowStates, refreshQueue, reorderQueuedJob, runningLabel, startQueue,
   startQueueStream,
 } from "./queue.js";
-import { fmtTime, isReimportableSource, storeGet, storeSet } from "./utils.js";
+import { fmtTime, hostOf, isReimportableSource, storeGet, storeSet } from "./utils.js";
 import { notifyFailure, setReleasePending, dismissFailuresByJobId, dismissFailuresByKind } from "./notifications.js";
 // Aliased (not the bare "t") -- this file already uses "t"/"tr" as local
 // variable names for track objects and table rows in several scopes.
@@ -794,11 +794,19 @@ function fmtExtracted(ts) {
   });
 }
 
+// A job id is 12 hex chars, issued by the server. Anything else is rejected
+// before it reaches a fetch URL, so a track id can never inject path segments.
+const JOB_ID_RE = /^[a-f0-9]{12}$/;
+function isJobId(id) {
+  return typeof id === "string" && JOB_ID_RE.test(id);
+}
+
 function deriveSource(sourceUrl) {
   if (!sourceUrl) return "—";
   if (sourceUrl.startsWith("local:")) return i18nT("track.localFile");
-  if (sourceUrl.includes("youtube.com") || sourceUrl.includes("youtu.be")) return "YouTube";
-  if (sourceUrl.includes("soundcloud.com")) return "SoundCloud";
+  const host = hostOf(sourceUrl);
+  if (host === "youtube.com" || host === "www.youtube.com" || host === "youtu.be" || host.endsWith(".youtube.com") || host.endsWith(".youtu.be")) return "YouTube";
+  if (host === "soundcloud.com" || host.endsWith(".soundcloud.com")) return "SoundCloud";
   return i18nT("track.web");
 }
 
@@ -816,8 +824,9 @@ function deriveQuality(track) {
     // to fall back to "Local file", repeating the source chip beside it.
     return trackFormat(track).toUpperCase();
   }
-  if (sourceUrl.includes("youtube.com") || sourceUrl.includes("youtu.be")) return i18nT("track.qualityHigh");
-  if (sourceUrl.includes("soundcloud.com")) return "MP3";
+  const host = hostOf(sourceUrl);
+  if (host === "youtube.com" || host === "www.youtube.com" || host === "youtu.be" || host.endsWith(".youtube.com") || host.endsWith(".youtu.be")) return i18nT("track.qualityHigh");
+  if (host === "soundcloud.com" || host.endsWith(".soundcloud.com")) return "MP3";
   return "—";
 }
 
@@ -973,6 +982,7 @@ function applyTrackInfoToPanel(track) {
  * catches anything that did not land.
  */
 function syncTrashToServer(trackId, trashed) {
+  if (!isJobId(trackId)) return;
   const action = trashed ? "trash" : "restore";
   return fetch(`/api/jobs/${encodeURIComponent(trackId)}/${action}`, { method: "POST" })
     .catch((e) => console.warn(`[catalog] could not ${action} ${trackId} on the server`, e));
@@ -987,6 +997,7 @@ function syncTrashToServer(trackId, trashed) {
  * same reason as the Trash: a heart must answer at once.
  */
 function syncFavoriteToServer(trackId, favorite) {
+  if (!isJobId(trackId)) return;
   fetch(`/api/jobs/${encodeURIComponent(trackId)}/favorite`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },

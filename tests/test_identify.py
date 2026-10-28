@@ -16,6 +16,7 @@ import threading
 import time
 import urllib.error
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 from unittest.mock import patch
 
 import pytest
@@ -545,6 +546,13 @@ def test_a_recording_only_on_a_soundtrack_keeps_the_soundtrack():
     assert identity["duration"] == 342.0
 
 
+def _url_is(url: str, host: str, path: str) -> bool:
+    """True only when `url` points exactly at host/path — not merely contains
+    them as a substring (e.g. https://evil.com/https://musicbrainz.org/...)."""
+    u = urlparse(url)
+    return u.hostname == host and u.path == path
+
+
 def test_the_real_request_names_stemdeck_and_waits_its_turn(monkeypatch):
     seen = {"waited": 0}
 
@@ -567,8 +575,8 @@ def test_the_real_request_names_stemdeck_and_waits_its_turn(monkeypatch):
     monkeypatch.setattr(mb.urllib.request, "urlopen", urlopen)
     assert _REAL_MB_FETCH(f"recording/{REC}", {"inc": "artist-credits"}) == {}
     assert seen["waited"] == 1
-    assert seen["url"].startswith(f"https://musicbrainz.org/ws/2/recording/{REC}?")
-    assert "fmt=json" in seen["url"]
+    assert _url_is(seen["url"], "musicbrainz.org", f"/ws/2/recording/{REC}")
+    assert parse_qs(urlparse(seen["url"]).query).get("fmt") == ["json"]
     assert seen["agent"].startswith("StemDeck/") and "github.com" in seen["agent"]
 
 

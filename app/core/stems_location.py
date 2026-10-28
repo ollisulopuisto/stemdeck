@@ -87,6 +87,11 @@ def validate_target(target: Path, current: Path) -> Path:
         raise StemsLocationError("Pick a folder to store stems in.")
 
     target = Path(target).expanduser()
+    # Path-injection guard: the user-supplied path must not be a symlink
+    # (which could point at any directory on the system) and must not contain
+    # ".." segments that resolve outside the intended location.
+    if target.is_symlink() or ".." in Path(target).parts:
+        raise StemsLocationError("The stems folder path is not allowed.")
     if not target.is_absolute():
         raise StemsLocationError("The stems folder must be an absolute path.")
     target = target.resolve()

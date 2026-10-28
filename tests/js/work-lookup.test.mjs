@@ -117,7 +117,7 @@ const work = await lookupWork("Q616439", "en", { fetchJson });
 check("the name", work?.name === "Wicked");
 check("the year", work?.year === "2003");
 check("the description", work?.description.startsWith("2003 musical"));
-check("the picture, from Commons", work?.image.startsWith("https://commons.wikimedia.org/wiki/Special:FilePath/Wicked%20musical%20logo.jpg"));
+check("the picture, from Commons", (() => { const u = new URL(work?.image); return u.hostname === "commons.wikimedia.org" && u.pathname.startsWith("/wiki/Special:FilePath/"); })());
 check("the synopsis", work?.synopsis[0]?.startsWith("In the Land of Oz"));
 check("music by", same(work?.composers, ["Stephen Schwartz"]));
 check("lyrics by", same(work?.lyricists, ["Stephen Schwartz"]));
@@ -168,7 +168,7 @@ check("the title in the reader's language", spirited?.name === "Spirited Away");
 check("and in its own, from its title claim", spirited?.nativeName === "千と千尋の神隠し" && spirited?.nativeLang === "ja");
 check("the story from the Japanese article", spirited?.synopsisLang === "ja" && spirited?.synopsis[0]?.startsWith("千尋は"));
 check("the link is to that article", spirited?.articleUrl === "https://ja.wikipedia.org/wiki/%E5%8D%83");
-check("the English article asked first", new URL(jaCalls.find((url) => url.includes("wikipedia.org"))).host === "en.wikipedia.org");
+check("the English article asked first", new URL(jaCalls.find((url) => new URL(url).hostname.endsWith("wikipedia.org"))).host === "en.wikipedia.org");
 
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

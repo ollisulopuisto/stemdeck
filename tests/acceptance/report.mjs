@@ -113,7 +113,7 @@ export default class AcceptanceReporter {
     };
     fs.writeFileSync(path.join(RESULTS_DIR, "report.json"), `${JSON.stringify(json, null, 2)}\n`);
 
-    const cell = (t) => clean(t).replace(/\|/g, "\\|").replace(/\n/g, " ");
+    const cell = (t) => clean(t).replace(/\|/g, "\\|").replace(/\n/g, " ").replace(/[&<>"']/g, "");
     const md = [
       `# StemDeck acceptance run`,
       "",

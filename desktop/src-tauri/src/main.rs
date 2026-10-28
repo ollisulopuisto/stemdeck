@@ -346,6 +346,10 @@ fn main() {
         let dir = args.next().unwrap_or_else(|| ".".to_string());
         match certs::ensure(Path::new(&dir)) {
             Ok(c) => {
+                // `--emit-lan-cert <dir>`: the caller asked for the cert/key
+                // *paths* on stdout so they can be captured. The paths are not
+                // secrets — only the cert/key files themselves are — so stdout
+                // is the intended channel here.
                 println!("{}", c.cert.display());
                 println!("{}", c.key.display());
             }

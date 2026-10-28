@@ -12,6 +12,7 @@ import json
 import threading
 import time
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 from unittest.mock import patch
 
 import pytest
@@ -302,6 +303,13 @@ def test_a_cancel_between_requests_stops_the_second():
     assert [p["action"] for p in wikidata.asked] == ["wbsearchentities"]
 
 
+def _url_is(url: str, host: str, path: str) -> bool:
+    """True only when `url` points exactly at host/path — not merely contains
+    them as a substring (e.g. https://evil.com/https://www.wikidata.org/...)."""
+    u = urlparse(url)
+    return u.hostname == host and u.path == path
+
+
 def test_the_request_names_stemdeck(monkeypatch):
     """Wikimedia's policy: a client says who it is and how to reach its maker."""
     seen = {}
@@ -326,8 +334,8 @@ def test_the_request_names_stemdeck(monkeypatch):
     assert _REAL_FETCH_JSON({"action": "wbsearchentities", "search": "Dream Theater"}) == {
         "search": []
     }
-    assert seen["url"].startswith("https://www.wikidata.org/w/api.php?")
-    assert "search=Dream+Theater" in seen["url"]
+    assert _url_is(seen["url"], "www.wikidata.org", "/w/api.php")
+    assert parse_qs(urlparse(seen["url"]).query).get("search") == ["Dream Theater"]
     assert "StemDeck" in seen["agent"] and "github.com" in seen["agent"]
     assert seen["timeout"] == al.TIMEOUT_ARTIST_LOOKUP
 

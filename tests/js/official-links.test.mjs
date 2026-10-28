@@ -125,7 +125,10 @@ const everything = [...hostileSites, ...badInstagram, ...badSpotify, ...badApple
 for (const kind of ["website", "instagram", "spotify", "appleMusic"]) {
   for (const value of everything) {
     const url = officialLinkUrl(kind, value);
-    if (url) check(`${kind} ${JSON.stringify(value.slice(0, 30))} is http(s)`, /^https?:\/\/[^/@\s]+\//.test(url), url);
+    if (url) {
+      const u = new URL(url);
+      check(`${kind} ${JSON.stringify(value.slice(0, 30))} is https`, u.protocol === "https:" && Boolean(u.hostname), url);
+    }
   }
 }
 

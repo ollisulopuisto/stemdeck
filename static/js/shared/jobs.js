@@ -2,7 +2,7 @@
 // (incrementally) the desktop catalog. Anything in here must stay free of
 // document/window-element access so it can be imported from either entry
 // point. The API (`GET /api/jobs`) is the canonical data source.
-import { fmtTime } from "../utils.js";
+import { fmtTime, hostOf } from "../utils.js";
 
 // Mirror of catalog.js PROCESSING_STATUSES — keep in sync with the backend
 // job lifecycle. These map to the amber "working" dot.
@@ -17,8 +17,9 @@ export async function fetchJobs() {
 export function deriveSource(sourceUrl) {
   if (!sourceUrl) return "Local file";
   if (sourceUrl.startsWith("local:")) return "Local file";
-  if (sourceUrl.includes("youtube.com") || sourceUrl.includes("youtu.be")) return "YouTube";
-  if (sourceUrl.includes("soundcloud.com")) return "SoundCloud";
+  const host = hostOf(sourceUrl);
+  if (host === "youtube.com" || host === "www.youtube.com" || host === "youtu.be" || host.endsWith(".youtube.com") || host.endsWith(".youtu.be")) return "YouTube";
+  if (host === "soundcloud.com" || host.endsWith(".soundcloud.com")) return "SoundCloud";
   return "Web";
 }
 

@@ -15,6 +15,7 @@ import time
 import unicodedata
 import urllib.error
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 from unittest.mock import patch
 
 import pytest
@@ -497,6 +498,13 @@ def test_out_of_time_asks_nothing_more_and_keeps_what_it_found():
     assert lookup_lyrics(query(), fetch_json=Lrclib(), budget=-1) is None
 
 
+def _url_is(url: str, host: str, path: str) -> bool:
+    """True only when `url` points exactly at host/path — not merely contains
+    them as a substring (e.g. https://evil.com/https://musicbrainz.org/...)."""
+    u = urlparse(url)
+    return u.hostname == host and u.path == path
+
+
 def test_the_request_names_stemdeck(monkeypatch):
     """LRCLIB asks clients to name themselves and their homepage."""
     seen = {}
@@ -519,8 +527,8 @@ def test_the_request_names_stemdeck(monkeypatch):
 
     monkeypatch.setattr(ll.urllib.request, "urlopen", urlopen)
     assert _REAL_FETCH_JSON("search", {"artist_name": "Dream Theater", "track_name": "X"}) == []
-    assert seen["url"].startswith("https://lrclib.net/api/search?")
-    assert "artist_name=Dream+Theater" in seen["url"]
+    assert _url_is(seen["url"], "lrclib.net", "/api/search")
+    assert parse_qs(urlparse(seen["url"]).query).get("artist_name") == ["Dream Theater"]
     assert "StemDeck" in seen["agent"] and "github.com" in seen["agent"]
     assert seen["timeout"] == ll.TIMEOUT_LYRICS_LOOKUP
 
