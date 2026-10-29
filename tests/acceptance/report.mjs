@@ -1,3 +1,4 @@
+import { escapeHtml } from "../helpers/text.mjs";
 // The run's report: report.md and report.json in acceptance-results/, one row
 // per check of the manual checklist in its order, plus copy-results.txt in the
 // shape the manual page's "Copy results" button produces.
@@ -113,7 +114,7 @@ export default class AcceptanceReporter {
     };
     fs.writeFileSync(path.join(RESULTS_DIR, "report.json"), `${JSON.stringify(json, null, 2)}\n`);
 
-    const cell = (t) => clean(t).replace(/\|/g, "\\|").replace(/\n/g, " ").replace(/[&<>"']/g, "");
+    const cell = (t) => escapeHtml(clean(t)).replace(/\|/g, "\\|").replace(/\n/g, " ");
     const md = [
       `# StemDeck acceptance run`,
       "",

@@ -106,3 +106,18 @@ def test_api_rejects_a_missing_file(client, tmp_path):
 
 def test_api_rejects_a_non_string(client):
     assert client.post("/api/settings", json={"cookies_file": 17}).status_code == 422
+
+
+def test_symlink_is_rejected_before_resolution(tmp_path, cookies_txt):
+    link = tmp_path / "linked-cookies.txt"
+    link.symlink_to(cookies_txt)
+    with pytest.raises(ValueError, match="path is not allowed"):
+        _settings.set_cookies_file(str(link))
+    assert _settings.get_cookies_file() is None
+
+
+def test_parent_traversal_is_rejected(tmp_path, cookies_txt):
+    (tmp_path / "child").mkdir()
+    with pytest.raises(ValueError, match="path is not allowed"):
+        _settings.set_cookies_file(str(tmp_path / "child" / ".." / cookies_txt.name))
+    assert _settings.get_cookies_file() is None

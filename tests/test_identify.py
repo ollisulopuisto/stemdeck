@@ -577,7 +577,8 @@ def test_the_real_request_names_stemdeck_and_waits_its_turn(monkeypatch):
     assert seen["waited"] == 1
     assert _url_is(seen["url"], "musicbrainz.org", f"/ws/2/recording/{REC}")
     assert parse_qs(urlparse(seen["url"]).query).get("fmt") == ["json"]
-    assert seen["agent"].startswith("StemDeck/") and "github.com" in seen["agent"]
+    assert seen["agent"] == mb.MUSICBRAINZ_USER_AGENT
+    assert seen["agent"].startswith("StemDeck/")
 
 
 def test_lookups_are_cached_on_disk_per_mbid(monkeypatch):

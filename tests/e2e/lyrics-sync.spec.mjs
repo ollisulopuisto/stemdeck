@@ -1,3 +1,4 @@
+import { lyricText } from "../helpers/text.mjs";
 // The Lyrics tab's Sync lines mode: timing lyrics line by line. Tap along
 // with playback (T or Enter), undo a tap (Backspace), drag a line's marker in
 // the lane over the waveform, nudge the line in hand with the arrows, re-time
@@ -49,7 +50,7 @@ function stamps(lrc) {
   for (const raw of String(lrc || "").split("\n")) {
     const m = /^\[(\d+):(\d+(?:\.\d+)?)\](.*)$/.exec(raw);
     if (!m) continue;
-    const text = m[3].replace(/<[^>]*>/g, "").replace(/[&<>"']/g, "").trim();
+    const text = lyricText(m[3]).trim();
     if (text) out.push([text, Math.round((Number(m[1]) * 60 + Number(m[2])) * 100) / 100]);
   }
   return out;

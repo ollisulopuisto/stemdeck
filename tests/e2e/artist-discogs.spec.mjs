@@ -1,3 +1,4 @@
+import { isWikipediaUrl } from "../helpers/url.mjs";
 // The artist box fills a band from Discogs when Wikipedia has none of it:
 // NIHIL, a Portuguese sludge band with a Discogs page and no Wikipedia
 // article. The page never talks to Discogs; the server does, with the user's
@@ -86,7 +87,7 @@ async function stubWikimedia(page, answers) {
     const url = new URL(route.request().url());
     const kind =
       url.host === "query.wikidata.org" ? "sparql"
-      : url.host.endsWith("wikipedia.org") ? "extract"
+      : isWikipediaUrl(url) ? "extract"
       : url.searchParams.get("action") === "wbsearchentities" ? "search"
       : url.searchParams.get("props").startsWith("labels") ? "members"
       : "entities";

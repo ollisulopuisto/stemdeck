@@ -1,3 +1,4 @@
+import { isWikipediaUrl } from "../helpers/url.mjs";
 // The artist box's other languages (static/js/artistLookup.js): which
 // Wikipedia editions a history is read from and in what order, what happens
 // when one of them fails or all are stubs, and the rules for the artist's own
@@ -96,7 +97,7 @@ function editionsFetch(extracts) {
   const fetchJson = async (url) => {
     const u = new URL(url);
     if (u.host === "query.wikidata.org") return { results: { bindings: [] } };
-    if (u.host.endsWith("wikipedia.org")) {
+    if (isWikipediaUrl(u)) {
       const edition = u.host.split(".")[0];
       asked.push(edition);
       const extract = extracts[edition];
