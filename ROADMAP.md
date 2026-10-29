@@ -170,3 +170,11 @@ one `linux/amd64` image that works on CPU and activates GPU through
 `--runtime=nvidia`. The desktop builds two bundles, and the NVIDIA one installs
 the CUDA torch wheel at first run rather than shipping it, because bundling it
 once put the release past GitHub's 2 GiB asset cap (#318, reverted by #320).
+
+### Apple Silicon preview build, 29 October 2026
+
+In progress: manual standard-hosted ARM64 build, not a release/promotion. Paired
+DMG and local runtime prevent a preview from requesting nonexistent upstream
+assets. Human-led merge required. Build/tests, model inference, MPS, listening
+and native installation are separate acceptance gates. See
+[preview build](docs/apple-silicon-preview.md). No native results yet.
