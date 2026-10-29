@@ -1,3 +1,4 @@
+import { isWikipediaUrl } from "../helpers/url.mjs";
 // Tracks imported before tags were read (#699) have none in the library, so
 // opening one asks the server to read them now, once, in the background. What
 // comes back is kept on the track, the card names the artist, the band is found
@@ -56,7 +57,7 @@ async function stubWikimedia(page) {
     asked.push(url.toString());
     const kind =
       url.host === "query.wikidata.org" ? "sparql"
-      : url.host.endsWith("wikipedia.org") ? "extract"
+      : isWikipediaUrl(url) ? "extract"
       : url.searchParams.get("action") === "wbsearchentities" ? "search"
       : url.searchParams.get("props") === "labels" ? "members"
       : "entities";

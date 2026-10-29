@@ -1,3 +1,4 @@
+import { isWikipediaUrl } from "../helpers/url.mjs";
 // The artist box for artists who are not English-speaking: a Chinese singer
 // read under an English app and under a simplified-Chinese one, and a Korean
 // band's members. Their own name beside the reader's, their history from
@@ -87,7 +88,7 @@ async function stubWikimedia(page) {
     let body;
     if (url.host === "query.wikidata.org") {
       body = p.get("query").includes("wd:Q238819") ? ALBUMS : { results: { bindings: [] } };
-    } else if (url.host.endsWith("wikipedia.org")) {
+    } else if (isWikipediaUrl(url)) {
       const edition = url.host.split(".")[0];
       body = { query: { pages: [{ extract: ARTICLES[edition]?.[p.get("titles")] || "" }] } };
     } else if (p.get("action") === "wbsearchentities") {
@@ -179,7 +180,7 @@ test.describe("artist box in other languages", () => {
 
     // Simplified labels, and the article once, in simplified script.
     expect(asked.some((u) => (u.searchParams.get("languages") || "").startsWith("zh-hans|zh-cn|zh|en"))).toBe(true);
-    const articles = asked.filter((u) => u.host.endsWith("wikipedia.org"));
+    const articles = asked.filter((u) => isWikipediaUrl(u));
     expect(articles.map((u) => `${u.host} ${u.searchParams.get("variant")}`)).toEqual(["zh.wikipedia.org zh-hans"]);
 
     await page.screenshot({ path: test.info().outputPath("jay-chou-zh-hans.png") });

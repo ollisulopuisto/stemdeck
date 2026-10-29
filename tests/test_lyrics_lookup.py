@@ -529,7 +529,7 @@ def test_the_request_names_stemdeck(monkeypatch):
     assert _REAL_FETCH_JSON("search", {"artist_name": "Dream Theater", "track_name": "X"}) == []
     assert _url_is(seen["url"], "lrclib.net", "/api/search")
     assert parse_qs(urlparse(seen["url"]).query).get("artist_name") == ["Dream Theater"]
-    assert "StemDeck" in seen["agent"] and "github.com" in seen["agent"]
+    assert seen["agent"] == ll.LRCLIB_USER_AGENT
     assert seen["timeout"] == ll.TIMEOUT_LYRICS_LOOKUP
 
 

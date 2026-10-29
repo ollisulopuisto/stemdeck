@@ -1,3 +1,4 @@
+import { lyricText } from "../helpers/text.mjs";
 // The manual test run for PR #713, automated against the real app and the
 // real internet. One test per check, titled with the check's id, so a result
 // here maps onto the manual checklist 1:1. The steps and expected results are
@@ -1154,7 +1155,7 @@ test(title("L4"), async ({ app }, testInfo) => {
       .map((line) => /^\[(\d+):(\d+(?:\.\d+)?)\]\s*(?:<[^>]*>)?\s*(\S.*)$/.exec(line.trim()))
       .find(Boolean);
     const start = Number(timed[1]) * 60 + Number(timed[2]);
-    note(testInfo, `Timed line by line; the offset is off, as it should be. First line "${timed[3].replace(/<[^>]*>/g, "").replace(/[&<>"']/g, "")}" at ${start.toFixed(2)} s.`);
+    note(testInfo, `Timed line by line; the offset is off, as it should be. First line "${lyricText(timed[3])}" at ${start.toFixed(2)} s.`);
     expect(start, "the first line starts where the video's singing does").toBeGreaterThan(14.5);
     expect(start).toBeLessThan(17.5);
     await shot(page, testInfo, "per-line");

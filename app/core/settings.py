@@ -427,12 +427,13 @@ def set_cookies_file(value: str | None) -> str | None:
             _ensure().pop("cookies_file", None)
             _save()
             return None
-        resolved = Path(str(value)).expanduser().resolve()
+        candidate = Path(str(value)).expanduser()
         # Path-injection guard: the user-supplied path must not be a symlink
         # (which could point at any file on the system) and must not contain
         # ".." segments that resolve outside the intended location.
-        if resolved.is_symlink() or ".." in Path(str(value)).parts:
+        if candidate.is_symlink() or ".." in candidate.parts:
             raise ValueError("cookies file path is not allowed")
+        resolved = candidate.resolve()
         if not resolved.is_file():
             raise ValueError("cookies file not found")
         try:

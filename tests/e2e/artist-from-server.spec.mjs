@@ -1,3 +1,4 @@
+import { isWikipediaUrl } from "../helpers/url.mjs";
 // The band arrives with the finished import (#699): the server looks it up from
 // the artist tag while the job separates, and the job's state carries it. The
 // page keeps it on the track and shows it with no lookup of its own and no
@@ -58,7 +59,7 @@ async function stubWikimedia(page) {
     asked.push(url.toString());
     const kind =
       url.host === "query.wikidata.org" ? "sparql"
-      : url.host.endsWith("wikipedia.org") ? "extract"
+      : isWikipediaUrl(url) ? "extract"
       : url.searchParams.get("action") === "wbsearchentities" ? "search"
       : url.searchParams.get("props") === "labels" ? "members"
       : "entities";

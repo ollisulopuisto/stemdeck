@@ -1,0 +1,11 @@
+import { isWikipediaUrl } from "../helpers/url.mjs";
+import assert from "node:assert/strict";
+import { escapeHtml, lyricText } from "../helpers/text.mjs";
+assert.equal(escapeHtml(`<img onerror="x"> & 'text'`), "&lt;img onerror=&quot;x&quot;&gt; &amp; &#39;text&#39;");
+assert.equal(escapeHtml("&lt;script&gt;"), "&amp;lt;script&amp;gt;");
+assert.equal(lyricText("<00:01.20>Server <00:01.80>one"), "Server one");
+assert.equal(lyricText("<scr<script>ipt>ok</scr</script>ipt>"), "ok");
+assert.equal(lyricText("A & B <unfinished"), "A  B unfinished");
+for (const host of ["en.wikipedia.org", "zh-min-nan.wikipedia.org"]) assert(isWikipediaUrl(`https://${host}/w/api.php`));
+for (const url of ["https://evilwikipedia.org", "https://en.wikipedia.org.evil.test", "https://wikipedia.org", "https://en.wikipedia.org:999", "http://en.wikipedia.org", "https://user@en.wikipedia.org"]) assert(!isWikipediaUrl(url), url);
+console.log("13 security helper cases passed");

@@ -1,3 +1,4 @@
+import { isWikipediaUrl } from "../helpers/url.mjs";
 // The work a soundtrack is from, as the artist box looks it up by the id the
 // server found (artistLookup.js lookupWork): its year, the people who wrote
 // it, and a short synopsis read out of the Wikipedia article, per language.
@@ -104,7 +105,7 @@ function fakeFetch({ offline = false, missing = false } = {}) {
     calls.push(url);
     if (offline) throw new Error("offline");
     const u = new URL(url);
-    if (u.host.endsWith("wikipedia.org")) return ANSWERS.extract;
+    if (isWikipediaUrl(u)) return ANSWERS.extract;
     if (u.searchParams.get("props") === "labels") return ANSWERS.people;
     if (missing) return { entities: { Q616439: { id: "Q616439", missing: "" } } };
     return ANSWERS.entities;
@@ -159,7 +160,7 @@ const spirited = await lookupWork("Q155653", "en", {
     jaCalls.push(url);
     const u = new URL(url);
     if (u.host === "ja.wikipedia.org") return { query: { pages: [{ extract: `概要。\n== あらすじ ==\n${"千尋は両親と共に不思議な町に迷い込む。".repeat(20)}` }] } };
-    if (u.host.endsWith("wikipedia.org")) return { query: { pages: [{ extract: "A film." }] } };
+    if (isWikipediaUrl(u)) return { query: { pages: [{ extract: "A film." }] } };
     if (u.searchParams.get("props") === "labels") return { entities: {} };
     return { entities: { Q155653: SPIRITED } };
   },
@@ -168,7 +169,7 @@ check("the title in the reader's language", spirited?.name === "Spirited Away");
 check("and in its own, from its title claim", spirited?.nativeName === "千と千尋の神隠し" && spirited?.nativeLang === "ja");
 check("the story from the Japanese article", spirited?.synopsisLang === "ja" && spirited?.synopsis[0]?.startsWith("千尋は"));
 check("the link is to that article", spirited?.articleUrl === "https://ja.wikipedia.org/wiki/%E5%8D%83");
-check("the English article asked first", new URL(jaCalls.find((url) => new URL(url).hostname.endsWith("wikipedia.org"))).host === "en.wikipedia.org");
+check("the English article asked first", new URL(jaCalls.find((url) => isWikipediaUrl(new URL(url)))).host === "en.wikipedia.org");
 
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

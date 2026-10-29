@@ -336,7 +336,7 @@ def test_the_request_names_stemdeck(monkeypatch):
     }
     assert _url_is(seen["url"], "www.wikidata.org", "/w/api.php")
     assert parse_qs(urlparse(seen["url"]).query).get("search") == ["Dream Theater"]
-    assert "StemDeck" in seen["agent"] and "github.com" in seen["agent"]
+    assert seen["agent"] == al.ARTIST_LOOKUP_USER_AGENT
     assert seen["timeout"] == al.TIMEOUT_ARTIST_LOOKUP
 
 

@@ -1,3 +1,4 @@
+import { isWikipediaUrl } from "../helpers/url.mjs";
 // The artist box's lookup (#699): which search result it takes as the
 // artist, a saved band found by its id, how it reads members, albums and the
 // History section out of what Wikidata and Wikipedia return, and how it tells
@@ -171,7 +172,7 @@ function fakeFetch({ fail: failing = [], nothing = false } = {}) {
     const u = new URL(url);
     const kind =
       u.host === "query.wikidata.org" ? "sparql"
-      : u.host.endsWith("wikipedia.org") ? "extract"
+      : isWikipediaUrl(u) ? "extract"
       : u.searchParams.get("action") === "wbsearchentities" ? "search"
       : u.searchParams.get("props").startsWith("labels") ? "members"
       : "entities";
@@ -410,7 +411,7 @@ function cjkFetch({ en = "Jay Chou is a singer.", pl = "Piosenkarz." } = {}) {
     const u = new URL(url);
     const p = u.searchParams;
     if (u.host === "query.wikidata.org") return { results: { bindings: [] } };
-    if (u.host.endsWith("wikipedia.org")) {
+    if (isWikipediaUrl(u)) {
       const edition = u.host.split(".")[0];
       const extract = edition === "zh" ? JAY_LONG_ZH : edition === "en" ? en : pl;
       return { query: { pages: [{ extract }] } };
@@ -423,7 +424,7 @@ function cjkFetch({ en = "Jay Chou is a singer.", pl = "Piosenkarz." } = {}) {
   };
   return { calls, fetchJson };
 }
-const wikipediaCalls = (calls) => calls.filter((url) => new URL(url).host.endsWith("wikipedia.org")).map((url) => new URL(url));
+const wikipediaCalls = (calls) => calls.filter((url) => isWikipediaUrl(new URL(url))).map((url) => new URL(url));
 
 const underEnglish = cjkFetch();
 const jayEn = await lookupArtist("周杰倫", "en", { fetchJson: underEnglish.fetchJson });
