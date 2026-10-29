@@ -1,6 +1,5 @@
 """Regression coverage for the path guards, independent of pipeline setup."""
 
-
 import pytest
 
 from app.core import settings
