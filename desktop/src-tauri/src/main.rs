@@ -207,6 +207,8 @@ struct RuntimeProbe {
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct RuntimeManifest {
+    #[serde(default)]
+    local_only: bool,
     version: String,
     arch: String,
     runtime_url: String,
@@ -923,6 +925,9 @@ async fn download_runtime_pack(app_handle: tauri::AppHandle) -> Result<RuntimeAr
         fs::create_dir_all(parent)
             .map_err(|e| format!("failed to create {}: {e}", parent.display()))?;
     }
+    if manifest.local_only {
+        return Err("This local preview requires its paired runtime archive. Run Install-and-launch.command from the downloaded artifact folder.".to_string());
+    }
     download_file_with_progress(&manifest.runtime_url, &archive, &app_handle).await?;
     verify_runtime_archive(&manifest, &archive)
 }
@@ -1552,6 +1557,9 @@ fn apply_app_update(
 /// returns for a NON-portable install, so the two layouts share one location
 /// and an install that switches between them keeps its settings either way.
 fn shared_settings_dir() -> Option<PathBuf> {
+    if let Ok(path) = env::var("STEMDECK_SETTINGS_DIR") {
+        return Some(PathBuf::from(path));
+    }
     #[cfg(windows)]
     {
         env::var("LOCALAPPDATA")
@@ -3908,7 +3916,7 @@ fn read_runtime_install_manifest(runtime_dir: &Path) -> Option<serde_json::Value
 }
 
 fn validate_runtime_manifest(manifest: &RuntimeManifest) -> Result<(), String> {
-    if manifest.runtime_url.trim().is_empty() {
+    if !manifest.local_only && manifest.runtime_url.trim().is_empty() {
         return Err("runtime manifest has an empty runtimeUrl".to_string());
     }
     let sha = manifest.runtime_sha256.trim();
@@ -6856,6 +6864,7 @@ mod tests {
 
     fn manifest_for(version: &str) -> super::RuntimeManifest {
         super::RuntimeManifest {
+            local_only: false,
             version: version.to_string(),
             arch: "arm64".to_string(),
             runtime_url: "https://example.invalid/StemDeck-runtime-macOS-arm64.tar.zst".to_string(),
@@ -6863,6 +6872,29 @@ mod tests {
             runtime_size: None,
             archive_name: Some("StemDeck-runtime-macOS-arm64.tar.zst".to_string()),
         }
+    }
+
+    #[test]
+    fn old_runtime_manifest_defaults_to_download_mode() {
+        let value = serde_json::json!({
+            "version": "1.2.3", "arch": "arm64", "runtimeUrl": "https://example.invalid/runtime.tar.zst",
+            "runtimeSha256": "0".repeat(64)
+        });
+        let manifest: super::RuntimeManifest = serde_json::from_value(value).unwrap();
+        assert!(!manifest.local_only);
+    }
+
+    #[test]
+    fn local_preview_accepts_no_download_url_but_still_requires_hash() {
+        let mut manifest = manifest_for("1.2.3");
+        manifest.local_only = true;
+        manifest.runtime_url.clear();
+        assert!(super::validate_runtime_manifest(&manifest).is_ok());
+        manifest.runtime_sha256.clear();
+        assert!(super::validate_runtime_manifest(&manifest).is_err());
+        manifest.local_only = false;
+        manifest.runtime_sha256 = "0".repeat(64);
+        assert!(super::validate_runtime_manifest(&manifest).is_err());
     }
 
     #[test]
