@@ -61,9 +61,10 @@ dependencies = [
     # python-multipart — it is not an optional extra.
     "python-multipart>=0.0.9",
     # CVE-2026-44431 / CVE-2026-44432: sensitive header forwarding and
-    # decompression-bomb bypass fixed in 2.7.0. urllib3 is a transitive
-    # dep via requests; pin floor to pull in the fix.
-    "urllib3>=2.7.0",
+    # decompression-bomb bypass fixed in 2.7.0; 2.8.0 additionally fixes
+    # unbounded chunk-size buffering and HTTPS proxy TLS override. urllib3 is
+    # a transitive dep via requests; pin floor to pull in the fixes.
+    "urllib3>=2.8.0",
     # Pure-Python QR code generator used by the /api/qr endpoint (server
     # access QR codes in the desktop settings panel).
     "segno>=1.6",
