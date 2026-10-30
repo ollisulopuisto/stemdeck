@@ -4,7 +4,7 @@ set -euo pipefail
 ARCH="${ARCH:-arm64}"
 VERSION="${VERSION:-LOCAL_DEV_TEST}"
 VERSION="${VERSION#v}"
-RELEASE_BASE_URL="${RELEASE_BASE_URL:-https://github.com/stemdeckapp/stemdeck/releases/download/v${VERSION}}"
+RELEASE_BASE_URL="${RELEASE_BASE_URL:-https://github.com/${GITHUB_REPOSITORY:-stemdeckapp/stemdeck}/releases/download/v${VERSION}}"
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 BUILD_DIR="${REPO_ROOT}/.build"
 STAGING="${BUILD_DIR}/runtime-staging-${ARCH}"
@@ -290,12 +290,18 @@ fi
 SIZE="$(stat -f%z "$ARCHIVE_PATH")"
 SHA256="$(shasum -a 256 "$ARCHIVE_PATH" | awk '{print $1}')"
 RUNTIME_URL="${RELEASE_BASE_URL}/${ARCHIVE_NAME}"
+LOCAL_ONLY=false
+if [[ "${LOCAL_PREVIEW:-0}" == "1" ]]; then
+  RUNTIME_URL=""
+  LOCAL_ONLY=true
+fi
 
 cat > "${BUILD_DIR}/runtime-manifest-${ARCH}.json" <<JSON
 {
   "version": "${VERSION}",
   "arch": "${ARCH}",
   "runtimeUrl": "${RUNTIME_URL}",
+  "localOnly": ${LOCAL_ONLY},
   "runtimeSha256": "${SHA256}",
   "runtimeSize": ${SIZE},
   "archiveName": "${ARCHIVE_NAME}"

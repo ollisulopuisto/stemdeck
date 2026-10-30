@@ -21,7 +21,7 @@ import threading
 import time
 from pathlib import Path
 
-from app.core.config import TIMEOUT_VOCAL_SPLIT
+from app.core.config import TIMEOUT_VOCAL_SPLIT, VOCAL_SPLIT_MODEL
 from app.core.models import Job
 from app.core.registry import set_proc
 from app.core.settings import get_demucs_device
@@ -146,9 +146,11 @@ def split_vocals(job: Job, stems_dir: Path) -> list[str]:
 
     if not job_ok:
         detail = "\n".join(tail[-15:]) if tail else "(no stderr captured)"
-        logger.warning("[%s] vocal split failed: %s", job.id, detail)
+        logger.warning("[%s] vocal split failed (%s): %s", job.id, VOCAL_SPLIT_MODEL, detail)
         last = tail[-1] if tail else "vocal split failed"
-        raise SeparationError(f"vocal split failed: {last}", tail=tail[-40:], device=device)
+        raise SeparationError(
+            f"vocal split failed ({VOCAL_SPLIT_MODEL}): {last}", tail=tail[-40:], device=device
+        )
 
     for name in ("lead_vocals", "backing_vocals"):
         if not (stems_dir / f"{name}.wav").is_file():

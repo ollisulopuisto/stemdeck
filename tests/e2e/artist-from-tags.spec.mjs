@@ -1,3 +1,4 @@
+import { isWikipediaUrl } from "../helpers/url.mjs";
 // A track whose file was tagged with an artist gets its band found and saved
 // on its own when it is opened, and the now-playing card names the artist
 // beside the title (#699). No click on the info button is involved.
@@ -60,7 +61,7 @@ async function stubWikimedia(page, { hold = null } = {}) {
     asked.push(url.toString());
     const kind =
       url.host === "query.wikidata.org" ? "sparql"
-      : url.host.endsWith("wikipedia.org") ? "extract"
+      : isWikipediaUrl(url) ? "extract"
       : url.searchParams.get("action") === "wbsearchentities" ? "search"
       : url.searchParams.get("props") === "labels" ? "members"
       : "entities";

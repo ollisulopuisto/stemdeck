@@ -1,3 +1,4 @@
+import { isWikipediaUrl } from "../helpers/url.mjs";
 // The artist box the info button on the now-playing card opens (#699): band name
 // on top, then History, Members and Studio albums, from Wikidata and
 // Wikipedia, and a band saved on the track so it opens straight on it later.
@@ -77,7 +78,7 @@ async function stubWikimedia(page, { offline = false, nothing = false } = {}) {
     if (offline) return route.abort("internetdisconnected");
     const kind =
       url.host === "query.wikidata.org" ? "sparql"
-      : url.host.endsWith("wikipedia.org") ? "extract"
+      : isWikipediaUrl(url) ? "extract"
       : url.searchParams.get("action") === "wbsearchentities" ? "search"
       : url.searchParams.get("props").startsWith("labels") ? "members"
       : "entities";

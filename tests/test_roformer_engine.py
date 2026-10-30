@@ -17,6 +17,7 @@ from app.core.config import STEM_NAMES
 from app.core.models import Job
 from app.pipeline import roformer as rf_mod
 from app.pipeline import roformer_worker as rw_mod
+from app.pipeline import safe_load as safe_load_mod
 from app.pipeline import separate as sep_mod
 from app.pipeline.errors import SeparationError
 
@@ -222,7 +223,7 @@ def test_weights_only_guard_blocks_malicious_pickle(tmp_path, monkeypatch, resto
         pickle.dump(Evil(), f)
 
     monkeypatch.delenv("TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD", raising=False)
-    rw_mod._require_weights_only_loading()
+    safe_load_mod.require_weights_only_loading()
     with pytest.raises(pickle.UnpicklingError):
         torch.load(bad, map_location="cpu")  # no weights_only argument, as audio-separator calls it
     assert not marker.exists()
@@ -232,4 +233,4 @@ def test_guard_refuses_when_environment_disables_weights_only(monkeypatch, resto
     pytest.importorskip("torch")
     monkeypatch.setenv("TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD", "1")
     with pytest.raises(RuntimeError, match="weights_only"):
-        rw_mod._require_weights_only_loading()
+        safe_load_mod.require_weights_only_loading()

@@ -1,3 +1,4 @@
+import { isWikipediaUrl } from "../helpers/url.mjs";
 // The work a soundtrack is from: a song from a musical or a film has the show
 // behind it, found by the server (app/pipeline/work_lookup.py) and kept on the
 // track. The now-playing card names it beside the song ("Popular · Wicked"),
@@ -71,7 +72,7 @@ async function stubWikimedia(page) {
     const p = url.searchParams;
     let body;
     if (url.host === "query.wikidata.org") body = { results: { bindings: [] } };
-    else if (url.host.endsWith("wikipedia.org")) body = { query: { pages: [{ extract: ARTICLES[p.get("titles")] || "" }] } };
+    else if (isWikipediaUrl(url)) body = { query: { pages: [{ extract: ARTICLES[p.get("titles")] || "" }] } };
     else if (p.get("action") === "wbsearchentities") body = { search: [] };
     else if (p.get("props") === "labels") body = PEOPLE;
     else body = { entities: Object.fromEntries(p.get("ids").split("|").filter((id) => ENTITIES[id]).map((id) => [id, ENTITIES[id]])) };

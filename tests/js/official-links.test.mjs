@@ -1,3 +1,4 @@
+import { isWikipediaUrl } from "../helpers/url.mjs";
 // A band's or a show's official links, read from the Wikidata item the artist
 // box already fetches (artistLookup.js officialLinks): site, Instagram,
 // Spotify, Apple Music. Wikidata is edited by anyone, so most of this is what
@@ -137,7 +138,7 @@ function fakeFetch(entities) {
   return async (url) => {
     const u = new URL(url);
     if (u.host === "query.wikidata.org") return { results: { bindings: [] } };
-    if (u.host.endsWith("wikipedia.org")) return { query: { pages: [{ extract: "" }] } };
+    if (isWikipediaUrl(u)) return { query: { pages: [{ extract: "" }] } };
     if (u.searchParams.get("props") === "labels") return { entities: {} };
     return { entities };
   };

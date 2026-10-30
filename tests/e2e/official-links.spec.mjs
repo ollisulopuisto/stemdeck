@@ -1,3 +1,4 @@
+import { isWikipediaUrl } from "../helpers/url.mjs";
 // Official links in the artist box: a band's or a show's own site, Instagram,
 // Spotify and Apple Music, read from the Wikidata item the box already asks
 // for. Only the ones that exist are shown, and no row at all when none do.
@@ -79,7 +80,7 @@ async function stubWikimedia(page) {
     const p = url.searchParams;
     let body;
     if (url.host === "query.wikidata.org") body = { results: { bindings: [] } };
-    else if (url.host.endsWith("wikipedia.org")) body = { query: { pages: [{ extract: "Lead.\n== Career ==\nA career." }] } };
+    else if (isWikipediaUrl(url)) body = { query: { pages: [{ extract: "Lead.\n== Career ==\nA career." }] } };
     else if (p.get("action") === "wbsearchentities") body = { search: [] };
     else if (p.get("props") === "labels") body = { entities: {} };
     else body = { entities: Object.fromEntries(p.get("ids").split("|").filter((id) => ENTITIES[id]).map((id) => [id, ENTITIES[id]])) };

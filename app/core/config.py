@@ -379,6 +379,14 @@ SECTION_REFINEMENT_RECURRENCE_LABEL_MARGIN = 0.25
 # deployment swap the checkpoint (e.g. to a roformer model) without a code
 # change; see docs/models.md for the license audit behind this default.
 VOCAL_SPLIT_MODEL = os.environ.get("STEMDECK_KARAOKE_MODEL", "").strip() or "UVR_MDXNET_KARA_2.onnx"
+
+
+def is_pickled_checkpoint(model_filename: str) -> bool:
+    """True for the torch .ckpt/.pth/.pt files, which are pickles. The default
+    Karaoke 2 model is an .onnx graph and is not."""
+    return model_filename.lower().endswith((".ckpt", ".pth", ".pt"))
+
+
 # A first run downloads the checkpoint (hundreds of MB); generous default so a
 # slow connection isn't mistaken for a stall.
 TIMEOUT_VOCAL_SPLIT = _env_int("STEMDECK_TIMEOUT_VOCAL_SPLIT", 1800)

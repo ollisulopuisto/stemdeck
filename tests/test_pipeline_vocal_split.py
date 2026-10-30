@@ -103,3 +103,31 @@ def test_split_vocals_requires_vocals_stem(job, tmp_path, monkeypatch):
 
     with pytest.raises(SeparationError, match="vocals.wav"):
         vs_mod.split_vocals(job, empty_stems_dir)
+
+
+def test_failure_names_the_model(job, stems_dir, monkeypatch):
+    monkeypatch.setattr(vs_mod, "get_demucs_device", lambda: "cpu")
+    monkeypatch.setattr(vs_mod, "_spawn_cmd", _stub(_FAILING_WORKER))
+    monkeypatch.setattr(vs_mod, "VOCAL_SPLIT_MODEL", "some_karaoke.ckpt")
+    with pytest.raises(SeparationError, match=r"some_karaoke\.ckpt"):
+        vs_mod.split_vocals(job, stems_dir)
+
+
+def test_worker_restricts_unpickling_for_a_torch_checkpoint(tmp_path, monkeypatch):
+    from app.pipeline import safe_load, vocal_split_worker
+
+    monkeypatch.setattr(vocal_split_worker, "VOCAL_SPLIT_MODEL", "some_karaoke.ckpt")
+
+    def refuse():
+        raise RuntimeError("guard called")
+
+    monkeypatch.setattr(safe_load, "require_weights_only_loading", refuse)
+    with pytest.raises(RuntimeError, match="guard called"):
+        vocal_split_worker._run("cpu", str(tmp_path / "v.wav"), str(tmp_path))
+
+
+def test_is_pickled_checkpoint():
+    from app.core.config import is_pickled_checkpoint
+
+    assert is_pickled_checkpoint("a.ckpt") and is_pickled_checkpoint("A.PTH")
+    assert not is_pickled_checkpoint("UVR_MDXNET_KARA_2.onnx")
