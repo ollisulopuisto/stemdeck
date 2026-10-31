@@ -11,6 +11,7 @@ from app.api.qr import router as qr_router
 from app.api.queue import router as queue_router
 from app.api.search import router as search_router
 from app.api.stems import router as stems_router
+from app.api.whats_new import router as whats_new_router
 
 router = APIRouter()
 router.include_router(config_router, tags=["config"])
@@ -22,3 +23,4 @@ router.include_router(queue_router, prefix="/queue", tags=["queue"])
 router.include_router(playlist_router, prefix="/playlist", tags=["playlist"])
 router.include_router(search_router, prefix="/search", tags=["search"])
 router.include_router(discogs_router, prefix="/discogs", tags=["discogs"])
+router.include_router(whats_new_router, tags=["whats-new"])

@@ -233,6 +233,7 @@ $PackageVersion = Get-PackageVersion
 $VersionJson = @{ version = $PackageVersion } | ConvertTo-Json -Compress
 $utf8NoBom = New-Object System.Text.UTF8Encoding $false
 [System.IO.File]::WriteAllText((Join-Path $BackendDir "static\version.json"), $VersionJson + "`n", $utf8NoBom)
+Copy-Item -Force (Join-Path $Root "CHANGELOG.md") (Join-Path $BackendDir "static\CHANGELOG.md")
 Copy-Item -Force (Join-Path $Root "pyproject.toml") (Join-Path $BackendDir "pyproject.toml")
 Copy-Item -Force (Join-Path $Root "uv.lock") (Join-Path $BackendDir "uv.lock")
 Copy-Item -Force (Join-Path $Root "packaging\windows\README-WINDOWS.txt") (Join-Path $Stage "README-WINDOWS.txt")
