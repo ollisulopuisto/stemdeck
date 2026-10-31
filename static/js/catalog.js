@@ -14,6 +14,7 @@ import {
 } from "./queue.js";
 import { fmtTime, hostOf, isReimportableSource, storeGet, storeSet } from "./utils.js";
 import { notifyFailure, setReleasePending, dismissFailuresByJobId, dismissFailuresByKind } from "./notifications.js";
+import { initWhatsNew } from "./whatsNew.js";
 // Aliased (not the bare "t") -- this file already uses "t"/"tr" as local
 // variable names for track objects and table rows in several scopes.
 import { t as i18nT, plural as i18nPlural, LANGUAGES, getLanguage, setLanguage, onLanguageChange, applyTranslations } from "./i18n.js";
@@ -5280,7 +5281,12 @@ export async function initCatalog() {
   onJobSettled(completeSettledJob);
   startQueueStream();
 
-  loadCurrentVersion().finally(checkForUpdate);
+  loadCurrentVersion().finally(() => {
+    checkForUpdate();
+    // Reads currentVersion once the health fetch resolved (or the fallback
+    // when it failed); quiet no-op when nothing new is installed.
+    initWhatsNew(currentVersion);
+  });
   syncWithServer();
   // A heart pressed on the phone (#734) shows here the next time this window
   // is looked at, rather than only after a reload. At most every 15 seconds,

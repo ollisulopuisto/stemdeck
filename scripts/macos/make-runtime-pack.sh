@@ -156,6 +156,7 @@ PY
 echo "==> Staging backend"
 cp -R "$REPO_ROOT/app" "$BACKEND_DIR/app"
 cp -R "$REPO_ROOT/static" "$BACKEND_DIR/static"
+cp "$REPO_ROOT/CHANGELOG.md" "$BACKEND_DIR/static/CHANGELOG.md"
 cp "$REPO_ROOT/pyproject.toml" "$BACKEND_DIR/pyproject.toml"
 cp "$REPO_ROOT/uv.lock" "$BACKEND_DIR/uv.lock"
 
