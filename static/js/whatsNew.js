@@ -145,12 +145,19 @@ function openWhatsNew(sections, { history = false, since = null, onExplicitClose
     : `<p class="wn-empty">The changelog is not available in this build.</p>`;
   body.scrollTop = 0;
 
-  const hide = () => backdrop.classList.add("hidden");
+  const hide = () => {
+    backdrop.classList.add("hidden");
+    document.removeEventListener("keydown", onKey, true);
+  };
   const explicit = () => { hide(); if (!history && onExplicitClose) onExplicitClose(); };
   done.onclick = explicit;
   close.onclick = explicit;
   backdrop.onmousedown = (e) => { if (e.target === backdrop) hide(); };
-  backdrop.onkeydown = (e) => { if (e.code === "Escape") hide(); };
+  // The panel opens programmatically, so nothing inside it holds focus: a
+  // backdrop-level keydown would never see Escape. Listen on the document
+  // while visible instead.
+  const onKey = (e) => { if (e.code === "Escape") { e.stopPropagation(); hide(); } };
+  document.addEventListener("keydown", onKey, true);
   backdrop.classList.remove("hidden");
 }
 

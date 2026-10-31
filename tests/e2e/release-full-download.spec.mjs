@@ -26,6 +26,11 @@ async function installedAppOffered(page, check) {
       return invoke(cmd, args);
     };
   }, check);
+  // The update dialog is under test here, not the What's New panel: with the
+  // stubbed version present in the real changelog, the panel would auto-open
+  // on a fresh profile and cover the notification bell. whatsnew.spec.mjs
+  // covers the panel itself.
+  await page.route("**/api/whats-new**", (route) => route.fulfill({ status: 404, body: "" }));
   await page.route("**/api/health**", (route) =>
     route.fulfill({
       status: 200,
