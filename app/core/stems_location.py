@@ -75,6 +75,22 @@ def directory_size(path: Path) -> int:
     return total
 
 
+def _has_symlink_component(path: Path) -> bool:
+    """True when any component of `path` is a symlink, not just the last one.
+
+    An intermediate symlinked directory resolves outside the path the user
+    supplied, which is exactly the path-injection marker this guard catches.
+    `resolve()` follows symlinks and would hide the evidence, so the check runs
+    on the un-resolved path, component by component."""
+    parts = path.parts
+    walker = Path("/") if path.is_absolute() else Path(".")
+    for part in parts[1:] if path.is_absolute() else parts:
+        walker = walker / part
+        if walker.is_symlink():
+            return True
+    return False
+
+
 def validate_target(target: Path, current: Path) -> Path:
     """Check a candidate location before anything is moved into it.
 
@@ -89,8 +105,10 @@ def validate_target(target: Path, current: Path) -> Path:
     target = Path(target).expanduser()
     # Path-injection guard: the user-supplied path must not be a symlink
     # (which could point at any directory on the system) and must not contain
-    # ".." segments that resolve outside the intended location.
-    if target.is_symlink() or ".." in Path(target).parts:
+    # ".." segments that resolve outside the intended location. Every component
+    # is checked: an intermediate symlinked directory resolves outside the
+    # supplied path even when the final component is not itself a symlink.
+    if target.is_symlink() or ".." in Path(target).parts or _has_symlink_component(target):
         raise StemsLocationError("The stems folder path is not allowed.")
     if not target.is_absolute():
         raise StemsLocationError("The stems folder must be an absolute path.")

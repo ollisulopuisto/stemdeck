@@ -409,6 +409,22 @@ def set_jobs_dir(value: str | None) -> tuple[str | None, bool]:
 # client that does not support them, which removes the unauthenticated fallback
 # clients that work for most people today. Turning this on when you do not need
 # it makes imports worse, not better.
+def _has_symlink_component(path: Path) -> bool:
+    """True when any component of `path` is a symlink, not just the last one.
+
+    An intermediate symlinked directory resolves outside the path the user
+    supplied, which is exactly the path-injection marker this guard catches.
+    `resolve()` follows symlinks and would hide the evidence, so the check runs
+    on the un-resolved path, component by component."""
+    parts = path.parts
+    walker = Path("/") if path.is_absolute() else Path(".")
+    for part in parts[1:] if path.is_absolute() else parts:
+        walker = walker / part
+        if walker.is_symlink():
+            return True
+    return False
+
+
 def get_cookies_file() -> str | None:
     with _LOCK:
         value = _ensure().get("cookies_file")
@@ -430,7 +446,7 @@ def set_cookies_file(value: str | None) -> str | None:
         candidate = Path(str(value)).expanduser()
         # Check the un-resolved path first: resolve() follows symlinks and
         # collapses "..", hiding those user-supplied path-injection markers.
-        if candidate.is_symlink() or ".." in candidate.parts:
+        if candidate.is_symlink() or ".." in candidate.parts or _has_symlink_component(candidate):
             raise ValueError("cookies file path is not allowed")
         resolved = candidate.resolve()
         if not resolved.is_file():
