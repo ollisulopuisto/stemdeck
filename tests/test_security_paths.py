@@ -32,3 +32,20 @@ def test_library_rejects_symlink_and_traversal_without_creating_target(tmp_path)
     assert list(other.iterdir()) == []
     assert not (tmp_path / "unused").exists()
     assert not (tmp_path / "new").exists()
+
+
+def test_library_rejects_intermediate_symlink_without_creating_target(tmp_path):
+    """An intermediate symlinked directory resolves outside the path supplied.
+    The final component is not itself a symlink, so a last-component-only guard
+    would let it through and even create a folder under the symlink target."""
+    current = tmp_path / "current"
+    current.mkdir()
+    real = tmp_path / "real"
+    real.mkdir()
+    link_dir = tmp_path / "link"
+    link_dir.symlink_to(real, target_is_directory=True)
+    candidate = link_dir / "nested"
+    with pytest.raises(StemsLocationError, match="not allowed"):
+        validate_target(candidate, current)
+    assert not candidate.exists()
+    assert not list(real.iterdir()), "nothing may be created through the symlink"

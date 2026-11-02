@@ -116,6 +116,20 @@ def test_symlink_is_rejected_before_resolution(tmp_path, cookies_txt):
     assert _settings.get_cookies_file() is None
 
 
+def test_intermediate_symlink_is_rejected(tmp_path):
+    """A symlinked directory in the middle of the path resolves outside the
+    path the user supplied. The final component is not itself a symlink, so a
+    guard that only looks at the last component would let it through."""
+    real_dir = tmp_path / "real"
+    real_dir.mkdir()
+    (real_dir / "cookies.txt").write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
+    link_dir = tmp_path / "link"
+    link_dir.symlink_to(real_dir, target_is_directory=True)
+    with pytest.raises(ValueError, match="path is not allowed"):
+        _settings.set_cookies_file(str(link_dir / "cookies.txt"))
+    assert _settings.get_cookies_file() is None
+
+
 def test_parent_traversal_is_rejected(tmp_path, cookies_txt):
     (tmp_path / "child").mkdir()
     with pytest.raises(ValueError, match="path is not allowed"):
