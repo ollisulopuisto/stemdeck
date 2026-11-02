@@ -10,7 +10,7 @@ export function escapeHtml(value) {
 // then HTML-escape, so nothing can break out of its cell.
 export function tableCell(text) {
   let s = String(text ?? "");
-  s = s.replace(/\|/g, "\\|").replace(/\r?\n|\r/g, " ");
+  s = s.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\r?\n|\r/g, " ");
   return escapeHtml(s);
 }
 
