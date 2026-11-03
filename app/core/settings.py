@@ -443,10 +443,17 @@ def set_cookies_file(value: str | None) -> str | None:
             _ensure().pop("cookies_file", None)
             _save()
             return None
-        candidate = Path(str(value)).expanduser()
+        raw = str(value)
+        # Path-injection guard: reject ".." segments and NUL bytes on the raw
+        # string before it ever becomes a path object, so Path() below never
+        # receives uncontrolled data. Filesystem-level checks (symlinks) still
+        # run afterwards on the un-resolved path.
+        if ".." in raw.replace("\\", "/").split("/") or "\x00" in raw:
+            raise ValueError("cookies file path is not allowed")
+        candidate = Path(raw).expanduser()
         # Check the un-resolved path first: resolve() follows symlinks and
         # collapses "..", hiding those user-supplied path-injection markers.
-        if candidate.is_symlink() or ".." in candidate.parts or _has_symlink_component(candidate):
+        if candidate.is_symlink() or _has_symlink_component(candidate):
             raise ValueError("cookies file path is not allowed")
         resolved = candidate.resolve()
         if not resolved.is_file():
