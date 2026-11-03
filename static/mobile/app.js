@@ -474,8 +474,8 @@ function keyRow() {
   return `<div class="speed-row key-row"${why}>
         <span class="speed-row-label">Key</span>
         <div class="key-steps">
-          <button class="key-step" data-key-step="-1" ${off || n <= PITCH_MIN ? "disabled" : ""}>&minus;</button>
-          <button class="key-step" data-key-step="1" ${off || n >= PITCH_MAX ? "disabled" : ""}>+</button>
+          <button class="key-step" aria-label="Lower pitch" data-key-step="-1" ${off || n <= PITCH_MIN ? "disabled" : ""}>&minus;</button>
+          <button class="key-step" aria-label="Raise pitch" data-key-step="1" ${off || n >= PITCH_MAX ? "disabled" : ""}>+</button>
         </div>
         <span class="speed-row-val${off ? " off" : ""}">${label}</span>
       </div>`;
@@ -497,9 +497,9 @@ function mixerScreen() {
   return `<div class="screen scrl">
     <div class="pad">
       <div class="mx-head">
-        <button class="icon-btn" data-action="tab" data-tab="library">${ICON.chevron}</button>
+        <button class="icon-btn" aria-label="Back to Library" data-action="tab" data-tab="library">${ICON.chevron}</button>
         <span class="now-playing">NOW PLAYING</span>
-        <button class="icon-btn">${ICON.dots}</button>
+        <button class="icon-btn" aria-label="More options">${ICON.dots}</button>
       </div>
       <div class="cover-wrap">
         <div class="cover" style="${artStyle(c)}"><span>${artLabel(c)}</span></div>
@@ -512,13 +512,13 @@ function mixerScreen() {
         <div class="wave-times"><span class="cur">${fmt(state.progress * dur)}</span><span class="dur">${fmt(dur)}</span></div>
       </div>
       <div class="transport">
-        <button class="t-step" data-action="prev" ${hasPrev ? "" : "disabled"}>${ICON.prev}</button>
-        <button class="t-play" data-action="play" data-playing="${state.playing}" ${canPlay ? "" : "disabled style=opacity:.45"}>${state.playing ? ICON.pause(26, "#1a1206") : ICON.play(28, "#1a1206")}</button>
-        <button class="t-step" data-action="next" ${hasNext ? "" : "disabled"}>${ICON.next}</button>
+        <button class="t-step" aria-label="Previous track" data-action="prev" ${hasPrev ? "" : "disabled"}>${ICON.prev}</button>
+        <button class="t-play" aria-label="${state.playing ? "Pause" : "Play"}" data-action="play" data-playing="${state.playing}" ${canPlay ? "" : "disabled style=opacity:.45"}>${state.playing ? ICON.pause(26, "#1a1206") : ICON.play(28, "#1a1206")}</button>
+        <button class="t-step" aria-label="Next track" data-action="next" ${hasNext ? "" : "disabled"}>${ICON.next}</button>
       </div>
       <div class="speed-row">
         <span class="speed-row-label">Speed</span>
-        <input type="range" class="speed-slider" data-speed min="0" max="2" step="0.25" value="${state.speed}">
+        <input type="range" aria-label="Playback speed" class="speed-slider" data-speed min="0" max="2" step="0.25" value="${state.speed}">
         <span class="speed-row-val">${state.speed % 1 === 0 ? state.speed.toFixed(1) : state.speed}x</span>
       </div>
       ${keyRow()}
