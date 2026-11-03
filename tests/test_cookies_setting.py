@@ -135,3 +135,13 @@ def test_parent_traversal_is_rejected(tmp_path, cookies_txt):
     with pytest.raises(ValueError, match="path is not allowed"):
         _settings.set_cookies_file(str(tmp_path / "child" / ".." / cookies_txt.name))
     assert _settings.get_cookies_file() is None
+
+
+def test_traversal_is_rejected_on_raw_string_before_path_built(tmp_path):
+    """CodeQL py/path-injection: the raw user string must be screened for
+    traversal markers before a Path is built from it. expanduser() would turn
+    "~" into the home directory and ".." would walk out of it, so the ".."
+    check must run on the un-expanded input."""
+    with pytest.raises(ValueError, match="path is not allowed"):
+        _settings.set_cookies_file("~/.../../etc/passwd")
+    assert _settings.get_cookies_file() is None

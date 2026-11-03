@@ -49,3 +49,15 @@ def test_library_rejects_intermediate_symlink_without_creating_target(tmp_path):
         validate_target(candidate, current)
     assert not candidate.exists()
     assert not list(real.iterdir()), "nothing may be created through the symlink"
+
+
+def test_traversal_is_rejected_on_raw_string_before_path_built(tmp_path):
+    """CodeQL py/path-injection: traversal markers in the raw user string must be
+    rejected before a Path is built from it. The check must run on the un-expanded
+    input so resolve() cannot collapse ".." and hide the evidence."""
+    current = tmp_path / "current"
+    current.mkdir()
+    with pytest.raises(StemsLocationError, match="not allowed"):
+        validate_target(tmp_path / "child" / ".." / "escape", current)
+    assert not (tmp_path / "child").exists()
+    assert not (tmp_path / "escape").exists()
