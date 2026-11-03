@@ -610,6 +610,11 @@ async def set_stems_location(request: Request) -> dict[str, object]:
     if not isinstance(raw, str):
         raise HTTPException(status_code=422, detail="path is required")
 
+    # Path-injection guard: reject ".." segments before any Path operation,
+    # so user-controlled data is validated before it reaches the path sink.
+    if ".." in raw.replace("\\", "/").split("/"):
+        raise HTTPException(status_code=422, detail="The stems folder path is not allowed.")
+
     # Close the door first. Validation touches the disk (it creates the target
     # and lists it), and an import accepted during that would have its directory
     # moved out from under it moments later. Every early exit below reopens it.

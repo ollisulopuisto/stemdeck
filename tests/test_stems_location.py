@@ -129,6 +129,16 @@ def test_rejects_an_empty_path(tmp_path):
         validate_target(Path(""), current)
 
 
+def test_rejects_parent_traversal(tmp_path):
+    """Polku, joka sisältää ".."-segmentin, hylätään jo ennen kuin sitä
+    käytetään Path-operaatiossa — käyttäjän syöte on validoitu ennen polkusisäänkäyntiä."""
+    current = tmp_path / "old"
+    current.mkdir()
+    target = tmp_path / "child" / ".." / "new"
+    with pytest.raises(StemsLocationError, match="not allowed"):
+        validate_target(target, current)
+
+
 # ── the move ─────────────────────────────────────────────────────────────────
 
 
