@@ -102,13 +102,20 @@ def validate_target(target: Path, current: Path) -> Path:
     if not str(target).strip():
         raise StemsLocationError("Pick a folder to store stems in.")
 
-    target = Path(target).expanduser()
+    text = str(target)
+    # Reject parent-traversal before the user-supplied string reaches Path():
+    # ".." as any path component is the classic injection marker, and
+    # expanduser() cannot introduce one, so checking the raw string keeps
+    # tainted data out of the path expression entirely.
+    if ".." in text.replace("\\", "/").split("/"):
+        raise StemsLocationError("The stems folder path is not allowed.")
+    target = Path(text).expanduser()
     # Path-injection guard: the user-supplied path must not be a symlink
     # (which could point at any directory on the system) and must not contain
     # ".." segments that resolve outside the intended location. Every component
     # is checked: an intermediate symlinked directory resolves outside the
     # supplied path even when the final component is not itself a symlink.
-    if target.is_symlink() or ".." in Path(target).parts or _has_symlink_component(target):
+    if target.is_symlink() or _has_symlink_component(target):
         raise StemsLocationError("The stems folder path is not allowed.")
     if not target.is_absolute():
         raise StemsLocationError("The stems folder must be an absolute path.")
