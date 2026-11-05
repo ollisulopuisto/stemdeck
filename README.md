@@ -91,7 +91,7 @@ All of it, with credits to the people who reported each problem, is in the [rele
 
 **Windows and Linux.** Unzip, then run `StemDeck.exe` (Windows) or `StemDeck` (Linux). No installer and nothing else to install. Put the folder somewhere you can write to, such as `C:\StemDeck`: a portable StemDeck keeps its runtime, models and settings in a `data` folder beside it, so it cannot run from Program Files. The first launch downloads FFmpeg and the separation model, and on an NVIDIA card sets up GPU support; later launches start in seconds.
 
-**macOS.** Open the DMG and drag StemDeck to Applications. StemDeck is not code-signed yet, so clear the quarantine flag once, or macOS will say the app is damaged:
+**macOS.** Open the DMG and drag StemDeck to Applications. StemDeck is signed with a Developer ID certificate but not notarized yet, so macOS may still refuse the first launch. If it says the app is damaged, clear the quarantine flag once:
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/StemDeck.app
