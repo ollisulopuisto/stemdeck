@@ -102,13 +102,31 @@ def validate_target(target: Path, current: Path) -> Path:
     if not str(target).strip():
         raise StemsLocationError("Pick a folder to store stems in.")
 
-    target = Path(target).expanduser()
+    # Path-injection guard: reject traversal markers and NUL bytes on the raw
+    # input before it is turned into a path object, so Path() below never
+    # receives uncontrolled data. Filesystem-level checks (symlinks) still
+    # run afterwards on the un-resolved path.
+    raw = str(target)
+    if "\x00" in raw or ".." in raw.replace("\\", "/").split("/"):
+        raise StemsLocationError("The stems folder path is not allowed.")
+
+    # The target must be an absolute path (or expanduser path that was absolute).
+    # Check this before os.path.abspath resolves a relative path into an absolute one.
+    check_path = Path(raw).expanduser()
+    if not check_path.is_absolute():
+        raise StemsLocationError("The stems folder must be an absolute path.")
+
+    norm_path = os.path.normpath(os.path.abspath(os.path.expanduser(raw)))
+    root_prefix = os.path.splitdrive(norm_path)[0] + os.sep if os.name == "nt" else "/"
+    if not norm_path.startswith(root_prefix) or not os.path.isabs(norm_path):
+        raise StemsLocationError("The stems folder path is not allowed.")
+
+    target = Path(norm_path)
     # Path-injection guard: the user-supplied path must not be a symlink
-    # (which could point at any directory on the system) and must not contain
-    # ".." segments that resolve outside the intended location. Every component
-    # is checked: an intermediate symlinked directory resolves outside the
+    # (which could point at any directory on the system). Every component is
+    # checked: an intermediate symlinked directory resolves outside the
     # supplied path even when the final component is not itself a symlink.
-    if target.is_symlink() or ".." in Path(target).parts or _has_symlink_component(target):
+    if target.is_symlink() or _has_symlink_component(target):
         raise StemsLocationError("The stems folder path is not allowed.")
     if not target.is_absolute():
         raise StemsLocationError("The stems folder must be an absolute path.")
