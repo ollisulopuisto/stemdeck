@@ -18,12 +18,16 @@ dependencies = [
     # 4.0.1 is what every prior release shipped and what the torch/torchaudio
     # pins below were written for.
     "demucs>=4.0.1,<4.1",
-    # Pin torch/torchaudio to 2.6.x — torchaudio 2.7+ removed its built-in
-    # audio writer and now requires the separate `torchcodec` package, which
-    # has ABI issues with torch 2.11. Demucs 4.0.1 calls torchaudio.save() to
-    # write stems, so it breaks on 2.7+.
-    "torch>=2.6,<2.7",
-    "torchaudio>=2.6,<2.7",
+    # Pin torch/torchaudio to 2.10.x — torch < 2.10 is vulnerable to remote
+    # code execution via untrusted checkpoint files (fixed in 2.10.0;
+    # Dependabot #97/#98). torchaudio 2.7+ removed its built-in audio writer
+    # and now requires the separate `torchcodec` package, which demucs 4.0.1
+    # needs via torchaudio.save(); torchcodec is pinned alongside so stems
+    # keep writing on 2.10. (torchcodec's ABI issue is with torch 2.11, not
+    # 2.10.)
+    "torch>=2.10,<2.11",
+    "torchaudio>=2.10,<2.11",
+    "torchcodec>=0.3,<0.4",
     # torchaudio 2.6 dispatches WAV writes through libsndfile via soundfile.
     # Without this, demucs crashes on save with "Couldn't find appropriate
     # backend to handle uri ... drums.wav".
