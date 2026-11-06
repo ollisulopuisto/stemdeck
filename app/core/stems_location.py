@@ -110,10 +110,9 @@ def validate_target(target: Path, current: Path) -> Path:
     if "\x00" in raw or ".." in raw.replace("\\", "/").split("/"):
         raise StemsLocationError("The stems folder path is not allowed.")
 
-    # The target must be an absolute path (or expanduser path that was absolute).
-    # Check this before os.path.abspath resolves a relative path into an absolute one.
-    check_path = Path(raw).expanduser()
-    if not check_path.is_absolute():
+    # The target must be an absolute path (or an unexpanded path starting with ~).
+    # Check this on the raw string before os.path.abspath turns relative paths into absolute paths.
+    if not (os.path.isabs(raw) or raw.startswith("~")):
         raise StemsLocationError("The stems folder must be an absolute path.")
 
     norm_path = os.path.normpath(os.path.abspath(os.path.expanduser(raw)))
