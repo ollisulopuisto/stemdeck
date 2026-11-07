@@ -1,16 +1,13 @@
 name: macOS Rust Check
 
-# Manual only -- not on every PR/push, to keep the self-hosted runner's load
-# and cost unchanged from today. Exists because ci.yml (which does run on
-# every PR) is 100% ubuntu-latest, and a Linux runner cannot type-check code
-# behind #[cfg(target_os = "macos")] at all -- that code is stripped before
-# semantic analysis even starts, not just skipped at test time. This is the
-# only way to get a real compiler pass over it before merging.
+# Native compiler gate on an ephemeral standard GitHub-hosted runner.
+# Standard runners are free for this public repository.
+
 on:
   workflow_dispatch:
   # Also on PRs that actually touch the Rust, so a desktop-shell change cannot
   # merge without a real compiler pass on this platform. Scoped by path so the
-  # self-hosted runner's load is unchanged for the majority of PRs, which do not
+  # job count is unchanged for the majority of PRs, which do not
   # go near src-tauri. (#421 added ~600 lines of mostly cfg-gated Rust and every
   # CI check passed without compiling any of it.)
   pull_request:
@@ -26,24 +23,11 @@ concurrency:
 
 jobs:
   check:
-    # Never run a fork's code on the self-hosted runner. cargo build/clippy/test
-    # all execute whatever the PR supplies -- build.rs, proc-macro crates, a
-    # swapped Cargo.toml dependency, the test bodies themselves -- and this
-    # runner is the same machine that builds, signs and uploads every macOS
-    # release. Nothing here cleans the workspace, so an implant in ~/.cargo,
-    # ~/.rustup or the persistent _work tree would survive into the next
-    # release. permissions: {} limits the token, not code execution.
-    #
-    # GitHub's public-repo default only gates *first-time* contributors, so one
-    # trivial merged PR is enough to unlock this for a later one. Fork PRs get a
-    # maintainer-triggered workflow_dispatch run instead.
+    # Keep fork execution behind a maintainer-dispatched check.
     if: >-
       github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == github.repository
-    # Runner must be darwin/arm64 with Xcode CLT and rustup (same requirements
-    # as macos-release.yml, which this intentionally does not replace -- this
-    # only builds/checks, never signs, packages, or uploads anything).
-    runs-on: [self-hosted, macOS, ARM64]
+    runs-on: macos-15
     timeout-minutes: 30
     defaults:
       run:
