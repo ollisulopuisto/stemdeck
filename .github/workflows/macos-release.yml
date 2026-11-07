@@ -3,6 +3,18 @@ name: macOS Release
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version tag (vMAJOR.MINOR.PATCH); macOS only, draft release"
+        required: true
+        default: "v0.20.1"
+  pull_request:
+    paths:
+      - ".github/workflows/macos-release.yml"
+      - "scripts/macos/make-app.sh"
+      - "scripts/macos/make-dmg.sh"
+      - "scripts/macos/notarize.sh"
 
 permissions: {}
 
@@ -11,14 +23,46 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  notarization-preflight:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: macos-15
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Check release credentials without exposing values
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in APPLE_ID APPLE_APP_PASSWORD BUILD_CERTIFICATE_BASE64 P12_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing release secret: $name"
+              missing=1
+            fi
+          done
+          test "$missing" = 0
+          bash -n scripts/macos/make-app.sh scripts/macos/make-dmg.sh scripts/macos/notarize.sh
+
   build-and-upload:
-    # Runner must be darwin/arm64 with Rosetta 2, Xcode CLT, Homebrew, rustup, and zstd.
-    runs-on: [self-hosted, macOS, ARM64]
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+    needs: notarization-preflight
+    # Standard hosted Apple Silicon runner, free for this public repository.
+    runs-on: macos-15
     timeout-minutes: 120
     permissions:
       contents: write
     env:
       APPLE_SIGNING_IDENTITY: "Developer ID Application: Olli Sulopuisto (LWSR8T5392)"
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+      APPLE_TEAM_ID: "LWSR8T5392"
+      STEMDECK_NOTARIZE: "1"
     defaults:
       run:
         shell: bash
@@ -28,15 +72,38 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
+      - name: prepare hosted toolchain
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          brew install uv zstd
+          rustup default stable
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          if ! arch -x86_64 /usr/bin/true >/dev/null 2>&1; then
+            sudo softwareupdate --install-rosetta --agree-to-license
+          fi
+
+      - name: verify notarization credentials
+        run: |
+          if [ -z "${APPLE_ID:-}" ] || [ -z "${APPLE_APP_PASSWORD:-}" ]; then
+            echo "ERROR: APPLE_ID and APPLE_APP_PASSWORD secrets must be set on this repo for a release build." >&2
+            echo "Refusing to publish an unnotarized release." >&2
+            exit 1
+          fi
+
       - name: write version files
         env:
           # github.ref_name (evaluated by Actions) instead of $GITHUB_REF_NAME,
           # which is only injected by runner >= 2.290 — empty on older
           # self-hosted runners.
-          REF_NAME: ${{ github.ref_name }}
+          REF_NAME: ${{ inputs.version || github.ref_name }}
         run: |
           if [ -z "${REF_NAME:-}" ]; then
             echo "REF_NAME is not set" >&2
+            exit 1
+          fi
+          if [[ ! "$REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release version must be vMAJOR.MINOR.PATCH" >&2
             exit 1
           fi
           VERSION="${REF_NAME#v}"
@@ -48,15 +115,15 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "Wrote version $VERSION to all version files"
 
-      # Self-hosted runner: use a throwaway keychain and put the user's keychain
+      # Use a throwaway keychain and put the runner's keychain
       # search list back afterwards, so nothing persists between runs.
       - name: import Developer ID certificate
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
           P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
           set -euo pipefail
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 32)"
           tmp="${RUNNER_TEMP:-$(mktemp -d)}"
           cert="$tmp/build_certificate.p12"
           keychain="$tmp/stemdeck-signing.keychain-db"
@@ -160,7 +227,10 @@ jobs:
           # pre-release to the latest release -- which also fires `released`,
           # pushing :latest to GHCR, and makes the in-app updater offer a build
           # that was never verified.
-          prerelease: ${{ github.event.release.prerelease }}
+          tag_name: ${{ inputs.version || github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          draft: ${{ github.event_name == 'workflow_dispatch' }}
+          prerelease: ${{ github.event.release.prerelease || false }}
           files: |
             .build/macos-dist/StemDeck-macOS-arm64.dmg
             .build/StemDeck-runtime-macOS-arm64.tar.zst

@@ -139,3 +139,14 @@ The library is persistent by default (`STEMDECK_PERSIST_LIBRARY=1`), so tracks a
 ./run.sh restart    # stop + start
 ./run.sh status     # is it running?
 ```
+
+### Fork notarized macOS release
+
+The macOS release workflow uses the existing self-hosted ARM64 Mac. Its
+preflight checks Developer ID and Apple notary credentials before building;
+missing credentials stop the release. The app uses hardened runtime and is
+notarized/stapled before the DMG is packed. The final signed DMG is also
+notarized/stapled and checked by Gatekeeper before its SHA256 is generated.
+Apple must return `Accepted`; upload success alone is not sufficient.
+The separately downloaded runtime packs are not notarized by this process.
+Intel remains Demucs-only; BS-Roformer-SW stays opt-in on Apple Silicon.

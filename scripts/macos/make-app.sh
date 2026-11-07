@@ -76,9 +76,23 @@ fi
 
 if [[ -n "$SIGN_ID" ]]; then
   echo "==> Signing app with Developer ID"
-  codesign --force --deep --timestamp --sign "$SIGN_ID" "$APP_DIR"
+  # Hardened runtime is mandatory for notarization (notarytool rejects the
+  # submission without it). If a future bundle loads unsigned third-party
+  # dylibs, add an entitlements plist with disable-library-validation here.
+  codesign --force --deep --options runtime --timestamp --sign "$SIGN_ID" "$APP_DIR"
   codesign --verify --deep --strict --verbose=2 "$APP_DIR"
 fi
 
 echo "$APP_DIR" > "$BUILD_DIR/app-path-${ARCH}.txt"
 echo "==> App ready: $APP_DIR"
+
+if [[ "${STEMDECK_NOTARIZE:-0}" == "1" ]]; then
+  : "${SIGN_ID:?Notarization requires a Developer ID signature}"
+  NOTARY_ZIP="$(mktemp -d)/StemDeck-notary.zip"
+  trap 'rm -rf "$(dirname "$NOTARY_ZIP")"' EXIT
+  ditto -c -k --keepParent "$APP_DIR" "$NOTARY_ZIP"
+  "$REPO_ROOT/scripts/macos/notarize.sh" "$NOTARY_ZIP"
+  xcrun stapler staple "$APP_DIR"
+  xcrun stapler validate "$APP_DIR"
+  spctl --assess --type execute --verbose=2 "$APP_DIR"
+fi
