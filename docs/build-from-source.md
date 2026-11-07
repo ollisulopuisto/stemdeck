@@ -155,3 +155,8 @@ The stapler helper retries URLSession timeout/connection-loss/offline errors
 up to three attempts (10s then 20s). Other ticket failures stop immediately.
 Persistent network failures still stop the release; validation and Gatekeeper
 checks are never skipped. Test with `python3 tests/packaging/test_stapler_retry.py`.
+
+Manual macOS release runs default to Apple Silicon only. Select `both` only
+when an Intel-compatible dependency set is available. No Torch security floor
+is lowered for Intel. All selected DMGs must pass final mounted-app signature,
+Gatekeeper and architecture checks before upload.
