@@ -17,6 +17,8 @@ jobs:
     timeout-minutes: 120
     permissions:
       contents: write
+    env:
+      APPLE_SIGNING_IDENTITY: "Developer ID Application: Olli Sulopuisto (LWSR8T5392)"
     defaults:
       run:
         shell: bash
@@ -45,6 +47,29 @@ jobs:
           sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" desktop/package.json
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "Wrote version $VERSION to all version files"
+
+      # Self-hosted runner: use a throwaway keychain and put the user's keychain
+      # search list back afterwards, so nothing persists between runs.
+      - name: import Developer ID certificate
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          tmp="${RUNNER_TEMP:-$(mktemp -d)}"
+          cert="$tmp/build_certificate.p12"
+          keychain="$tmp/stemdeck-signing.keychain-db"
+          security list-keychains -d user | tr -d '"' > "$tmp/keychains.orig"
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 -D -o "$cert"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$keychain"
+          security import "$cert" -P "$P12_PASSWORD" -T /usr/bin/codesign -f pkcs12 -k "$keychain"
+          rm -f "$cert"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$keychain"
+          security list-keychains -d user -s "$keychain" $(cat "$tmp/keychains.orig")
+          security find-identity -v -p codesigning "$keychain"
 
       - name: build macOS arm64
         env:
@@ -115,6 +140,17 @@ jobs:
             rmdir "$mountpoint"
             trap - EXIT
           done
+
+      - name: remove signing keychain
+        if: always()
+        run: |
+          tmp="${RUNNER_TEMP:-}"
+          [ -n "$tmp" ] || exit 0
+          if [ -s "$tmp/keychains.orig" ]; then
+            security list-keychains -d user -s $(cat "$tmp/keychains.orig") || true
+          fi
+          rm -f "$tmp/build_certificate.p12"
+          security delete-keychain "$tmp/stemdeck-signing.keychain-db" || true
 
       - name: upload artifacts
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64  # v3.0.3

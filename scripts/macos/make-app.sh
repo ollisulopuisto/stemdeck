@@ -26,6 +26,10 @@ for cmd in node npm cargo; do
   fi
 done
 
+# Developer ID identity (CI). Tauri must not sign: files are added to the bundle
+# below, which would invalidate its signature. The bundle is signed at the end.
+SIGN_ID="${APPLE_SIGNING_IDENTITY:-}"
+
 mkdir -p "$BUILD_DIR"
 
 echo "==> Stamping version ${VERSION}"
@@ -41,10 +45,10 @@ export CI=true
 
 npm ci
 if [[ "$ARCH" == "arm64" ]]; then
-  npx tauri build --bundles app --target aarch64-apple-darwin
+  env -u APPLE_SIGNING_IDENTITY npx tauri build --bundles app --target aarch64-apple-darwin
   TARGET_DIR="$REPO_ROOT/desktop/src-tauri/target/aarch64-apple-darwin/release"
 else
-  npx tauri build --bundles app --target x86_64-apple-darwin
+  env -u APPLE_SIGNING_IDENTITY npx tauri build --bundles app --target x86_64-apple-darwin
   TARGET_DIR="$REPO_ROOT/desktop/src-tauri/target/x86_64-apple-darwin/release"
 fi
 
@@ -68,6 +72,12 @@ fi
 
 if [[ -f "$REPO_ROOT/packaging/macos/THIRD_PARTY_NOTICES.txt" ]]; then
   cp "$REPO_ROOT/packaging/macos/THIRD_PARTY_NOTICES.txt" "$RESOURCES/THIRD_PARTY_NOTICES.txt"
+fi
+
+if [[ -n "$SIGN_ID" ]]; then
+  echo "==> Signing app with Developer ID"
+  codesign --force --deep --timestamp --sign "$SIGN_ID" "$APP_DIR"
+  codesign --verify --deep --strict --verbose=2 "$APP_DIR"
 fi
 
 echo "$APP_DIR" > "$BUILD_DIR/app-path-${ARCH}.txt"

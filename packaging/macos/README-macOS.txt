@@ -27,5 +27,5 @@ Uninstall:
 Notes:
 
 - Internet access is required for first-run setup.
-- Public releases should be signed and notarized.
+- Public releases are signed with a Developer ID certificate; notarization is not set up yet.
 - Unsigned local builds are for development and internal testing only.
