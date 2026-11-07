@@ -71,3 +71,58 @@ def test_library_rejects_null_byte_in_path(tmp_path):
     with pytest.raises(StemsLocationError, match="not allowed"):
         validate_target(str(tmp_path / "elsewhere") + "\x00", current)
     assert not (tmp_path / "elsewhere").exists()
+
+
+def test_cookies_rejects_raw_traversal_before_path_construction(tmp_path, monkeypatch):
+    """User-supplied '..' in the raw string is rejected before a Path is built
+    from it. CodeQL flags dataflow from the request body to the Path()
+    constructor, so the check must run on the un-expanded input -- not on
+    candidate.parts after construction."""
+    monkeypatch.setattr(settings, "_state", {})
+    monkeypatch.setattr(settings, "_SETTINGS_PATH", tmp_path / "settings.json")
+    real = tmp_path / "cookies.txt"
+    real.write_text("# Netscape HTTP Cookie File\n")
+    # Construct the string by hand so pathlib does not collapse the '../'.
+    traversal = f"{tmp_path}/real/../cookies.txt"
+    with pytest.raises(ValueError, match="path is not allowed"):
+        settings.set_cookies_file(traversal)
+    assert settings.get_cookies_file() is None
+
+
+def test_cookies_rejects_backslash_traversal(tmp_path, monkeypatch):
+    """On POSIX pathlib treats '\\' as a literal character, so '..' inside a
+    backslash-separated segment never appears as a separate part in
+    candidate.parts and the post-construction check misses it. The raw-string
+    check normalizes both separators and rejects it with the right message."""
+    monkeypatch.setattr(settings, "_state", {})
+    monkeypatch.setattr(settings, "_SETTINGS_PATH", tmp_path / "settings.json")
+    real = tmp_path / "cookies.txt"
+    real.write_text("# Netscape HTTP Cookie File\n")
+    traversal = f"{tmp_path}\\real\\..\\cookies.txt"
+    with pytest.raises(ValueError, match="path is not allowed"):
+        settings.set_cookies_file(traversal)
+    assert settings.get_cookies_file() is None
+
+
+def test_library_rejects_raw_traversal_before_path_construction(tmp_path):
+    """Same guard for the stems folder: '..' in the raw input is rejected
+    before Path(target).expanduser() is reached."""
+    current = tmp_path / "current"
+    current.mkdir()
+    traversal = f"{tmp_path}/unused/../new"
+    with pytest.raises(StemsLocationError, match="not allowed"):
+        validate_target(traversal, current)
+    assert not (tmp_path / "unused").exists()
+    assert not (tmp_path / "new").exists()
+
+
+def test_library_rejects_backslash_traversal(tmp_path):
+    """Backslash traversal is rejected before Path construction on POSIX,
+    where pathlib would otherwise keep '\\..\\' as one literal component."""
+    current = tmp_path / "current"
+    current.mkdir()
+    traversal = f"{tmp_path}\\unused\\..\\new"
+    with pytest.raises(StemsLocationError, match="not allowed"):
+        validate_target(traversal, current)
+    assert not (tmp_path / "unused").exists()
+    assert not (tmp_path / "new").exists()
