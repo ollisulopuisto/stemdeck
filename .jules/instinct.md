@@ -32,3 +32,8 @@ throwaway keychain password, so no extra KEYCHAIN_PASSWORD secret is needed.
 GitHub docs confirm standard hosted jobs are free for this public repository:
 https://docs.github.com/en/actions/concepts/billing-and-usage
 No larger runners, artifact storage or additional services were added.
+
+Manual builds take a validated vMAJOR.MINOR.PATCH input, run only the macOS
+pipeline, and upload to a draft release. This avoids the unrelated inherited
+Linux/Windows release-event jobs, which remain untouched. Full published
+release behavior is preserved for larger releases.
