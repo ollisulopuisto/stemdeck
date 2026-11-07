@@ -150,3 +150,8 @@ notarized/stapled and checked by Gatekeeper before its SHA256 is generated.
 Apple must return `Accepted`; upload success alone is not sufficient.
 The separately downloaded runtime packs are not notarized by this process.
 Intel remains Demucs-only; BS-Roformer-SW stays opt-in on Apple Silicon.
+
+The stapler helper retries URLSession timeout/connection-loss/offline errors
+up to three attempts (10s then 20s). Other ticket failures stop immediately.
+Persistent network failures still stop the release; validation and Gatekeeper
+checks are never skipped. Test with `python3 tests/packaging/test_stapler_retry.py`.
