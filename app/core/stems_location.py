@@ -107,10 +107,20 @@ def validate_target(target: Path, current: Path) -> Path:
     # receives uncontrolled data. Filesystem-level checks (symlinks) still
     # run afterwards on the un-resolved path.
     raw = str(target)
-    if ".." in raw.replace("\\", "/").split("/") or "\x00" in raw:
+    if "\x00" in raw or ".." in raw.replace("\\", "/").split("/"):
         raise StemsLocationError("The stems folder path is not allowed.")
 
-    target = Path(raw).expanduser()
+    # The target must be an absolute path (or an unexpanded path starting with ~).
+    # Check this on the raw string before os.path.abspath turns relative paths into absolute paths.
+    if not (os.path.isabs(raw) or raw.startswith("~")):
+        raise StemsLocationError("The stems folder must be an absolute path.")
+
+    norm_path = os.path.normpath(os.path.abspath(os.path.expanduser(raw)))
+    root_prefix = os.path.splitdrive(norm_path)[0] + os.sep if os.name == "nt" else "/"
+    if not norm_path.startswith(root_prefix) or not os.path.isabs(norm_path):
+        raise StemsLocationError("The stems folder path is not allowed.")
+
+    target = Path(norm_path)
     # Path-injection guard: the user-supplied path must not be a symlink
     # (which could point at any directory on the system). Every component is
     # checked: an intermediate symlinked directory resolves outside the
