@@ -92,7 +92,6 @@ if [[ "${STEMDECK_NOTARIZE:-0}" == "1" ]]; then
   trap 'rm -rf "$(dirname "$NOTARY_ZIP")"' EXIT
   ditto -c -k --keepParent "$APP_DIR" "$NOTARY_ZIP"
   "$REPO_ROOT/scripts/macos/notarize.sh" "$NOTARY_ZIP"
-  xcrun stapler staple "$APP_DIR"
-  xcrun stapler validate "$APP_DIR"
+  "$REPO_ROOT/scripts/macos/staple.sh" "$APP_DIR"
   spctl --assess --type execute --verbose=2 "$APP_DIR"
 fi

@@ -142,7 +142,7 @@ The library is persistent by default (`STEMDECK_PERSIST_LIBRARY=1`), so tracks a
 
 ### Fork notarized macOS release
 
-The macOS release workflow uses the existing self-hosted ARM64 Mac. Its
+The fork macOS release workflow uses a standard GitHub-hosted macos-15 runner. Its
 preflight checks Developer ID and Apple notary credentials before building;
 missing credentials stop the release. The app uses hardened runtime and is
 notarized/stapled before the DMG is packed. The final signed DMG is also
@@ -150,3 +150,13 @@ notarized/stapled and checked by Gatekeeper before its SHA256 is generated.
 Apple must return `Accepted`; upload success alone is not sufficient.
 The separately downloaded runtime packs are not notarized by this process.
 Intel remains Demucs-only; BS-Roformer-SW stays opt-in on Apple Silicon.
+
+The stapler helper retries URLSession timeout/connection-loss/offline errors
+up to three attempts (10s then 20s). Other ticket failures stop immediately.
+Persistent network failures still stop the release; validation and Gatekeeper
+checks are never skipped. Test with `python3 tests/packaging/test_stapler_retry.py`.
+
+Manual macOS release runs default to Apple Silicon only. Select `both` only
+when an Intel-compatible dependency set is available. No Torch security floor
+is lowered for Intel. All selected DMGs must pass final mounted-app signature,
+Gatekeeper and architecture checks before upload.

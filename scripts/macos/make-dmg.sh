@@ -149,8 +149,7 @@ if [[ "${STEMDECK_NOTARIZE:-0}" == "1" ]]; then
   : "${APPLE_APP_PASSWORD:?ERROR: STEMDECK_NOTARIZE=1 requires APPLE_APP_PASSWORD (app-specific password)}"
   "$REPO_ROOT/scripts/macos/notarize.sh" "$DMG_PATH"
   echo "==> Stapling notarization ticket to DMG"
-  xcrun stapler staple "$DMG_PATH"
-  xcrun stapler validate "$DMG_PATH"
+  "$REPO_ROOT/scripts/macos/staple.sh" "$DMG_PATH"
   spctl --assess --type open --context context:primary-signature --verbose=2 "$DMG_PATH"
 fi
 
