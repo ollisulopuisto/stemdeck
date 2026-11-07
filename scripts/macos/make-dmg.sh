@@ -134,6 +134,26 @@ if [[ -n "${APPLE_SIGNING_IDENTITY:-}" ]]; then
   codesign --verify --verbose=2 "$DMG_PATH"
 fi
 
+# Notarize and staple the DMG so Gatekeeper accepts it without a network
+# lookup. Fails closed: with STEMDECK_NOTARIZE=1 every required credential
+# must be present and notarytool must accept the submission, otherwise the
+# build stops and no unnotarized DMG reaches the release. Notarizing the DMG
+# covers the app inside it for this distribution channel; the runtime pack
+# (tar.zst) is fetched in-app and is not part of the notarized artifact.
+if [[ "${STEMDECK_NOTARIZE:-0}" == "1" ]]; then
+  if [[ -z "${APPLE_SIGNING_IDENTITY:-}" ]]; then
+    echo "ERROR: STEMDECK_NOTARIZE=1 requires a signed DMG (set APPLE_SIGNING_IDENTITY)" >&2
+    exit 1
+  fi
+  : "${APPLE_ID:?ERROR: STEMDECK_NOTARIZE=1 requires APPLE_ID (Apple account email)}"
+  : "${APPLE_APP_PASSWORD:?ERROR: STEMDECK_NOTARIZE=1 requires APPLE_APP_PASSWORD (app-specific password)}"
+  "$REPO_ROOT/scripts/macos/notarize.sh" "$DMG_PATH"
+  echo "==> Stapling notarization ticket to DMG"
+  xcrun stapler staple "$DMG_PATH"
+  xcrun stapler validate "$DMG_PATH"
+  spctl --assess --type open --context context:primary-signature --verbose=2 "$DMG_PATH"
+fi
+
 CHECKSUMS_PATH="${DIST_DIR}/SHA256SUMS-macOS-${ARCH}.txt"
 {
   shasum -a 256 "$DMG_PATH"

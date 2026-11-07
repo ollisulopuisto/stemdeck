@@ -3,6 +3,13 @@ name: macOS Release
 on:
   release:
     types: [published]
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/macos-release.yml"
+      - "scripts/macos/make-app.sh"
+      - "scripts/macos/make-dmg.sh"
+      - "scripts/macos/notarize.sh"
 
 permissions: {}
 
@@ -11,7 +18,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  notarization-preflight:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Check release credentials without exposing values
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in APPLE_ID APPLE_APP_PASSWORD BUILD_CERTIFICATE_BASE64 P12_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing release secret: $name"
+              missing=1
+            fi
+          done
+          test "$missing" = 0
+          bash -n scripts/macos/make-app.sh scripts/macos/make-dmg.sh scripts/macos/notarize.sh
+
   build-and-upload:
+    if: github.event_name == 'release'
+    needs: notarization-preflight
     # Runner must be darwin/arm64 with Rosetta 2, Xcode CLT, Homebrew, rustup, and zstd.
     runs-on: [self-hosted, macOS, ARM64]
     timeout-minutes: 120
@@ -19,6 +54,10 @@ jobs:
       contents: write
     env:
       APPLE_SIGNING_IDENTITY: "Developer ID Application: Olli Sulopuisto (LWSR8T5392)"
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+      APPLE_TEAM_ID: "LWSR8T5392"
+      STEMDECK_NOTARIZE: "1"
     defaults:
       run:
         shell: bash
@@ -27,6 +66,14 @@ jobs:
         run: rm -rf .build dist
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: verify notarization credentials
+        run: |
+          if [ -z "${APPLE_ID:-}" ] || [ -z "${APPLE_APP_PASSWORD:-}" ]; then
+            echo "ERROR: APPLE_ID and APPLE_APP_PASSWORD secrets must be set on this repo for a release build." >&2
+            echo "Refusing to publish an unnotarized release." >&2
+            exit 1
+          fi
 
       - name: write version files
         env:
