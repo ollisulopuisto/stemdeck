@@ -51,7 +51,26 @@ def test_library_rejects_intermediate_symlink_without_creating_target(tmp_path):
     assert not list(real.iterdir()), "nothing may be created through the symlink"
 
 
-# ── path-injection: traversal markers rejected before Path construction ──
+def test_cookie_rejects_null_byte_in_path(tmp_path, monkeypatch):
+    """A NUL byte can truncate a path on some filesystems and is an injection
+    marker; it must be rejected before the string ever becomes a Path."""
+    monkeypatch.setattr(settings, "_state", {})
+    monkeypatch.setattr(settings, "_SETTINGS_PATH", tmp_path / "settings.json")
+    real = tmp_path / "cookies.txt"
+    real.write_text("# Netscape HTTP Cookie File\n")
+    with pytest.raises(ValueError, match="path is not allowed"):
+        settings.set_cookies_file(str(real) + "\x00")
+    assert settings.get_cookies_file() is None
+
+
+def test_library_rejects_null_byte_in_path(tmp_path):
+    """Same NUL-byte guard for the stems folder: rejected at the raw-string
+    level, before Path() ever sees it."""
+    current = tmp_path / "current"
+    current.mkdir()
+    with pytest.raises(StemsLocationError, match="not allowed"):
+        validate_target(str(tmp_path / "elsewhere") + "\x00", current)
+    assert not (tmp_path / "elsewhere").exists()
 
 
 def test_cookies_rejects_raw_traversal_before_path_construction(tmp_path, monkeypatch):
@@ -59,10 +78,6 @@ def test_cookies_rejects_raw_traversal_before_path_construction(tmp_path, monkey
     from it. CodeQL flags dataflow from the request body to the Path()
     constructor, so the check must run on the un-expanded input -- not on
     candidate.parts after construction."""
-
-def test_cookie_rejects_null_byte_in_path(tmp_path, monkeypatch):
-    """A NUL byte can truncate a path on some filesystems and is an injection
-    marker; it must be rejected before the string ever becomes a Path."""
     monkeypatch.setattr(settings, "_state", {})
     monkeypatch.setattr(settings, "_SETTINGS_PATH", tmp_path / "settings.json")
     real = tmp_path / "cookies.txt"
@@ -111,17 +126,3 @@ def test_library_rejects_backslash_traversal(tmp_path):
         validate_target(traversal, current)
     assert not (tmp_path / "unused").exists()
     assert not (tmp_path / "new").exists()
-
-    with pytest.raises(ValueError, match="path is not allowed"):
-        settings.set_cookies_file(str(real) + "\x00")
-    assert settings.get_cookies_file() is None
-
-
-def test_library_rejects_null_byte_in_path(tmp_path):
-    """Same NUL-byte guard for the stems folder: rejected at the raw-string
-    level, before Path() ever sees it."""
-    current = tmp_path / "current"
-    current.mkdir()
-    with pytest.raises(StemsLocationError, match="not allowed"):
-        validate_target(str(tmp_path / "elsewhere") + "\x00", current)
-    assert not (tmp_path / "elsewhere").exists()
