@@ -20,7 +20,7 @@ concurrency:
 jobs:
   notarization-preflight:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, macOS, ARM64]
+    runs-on: macos-15
     timeout-minutes: 5
     permissions:
       contents: read
@@ -47,8 +47,8 @@ jobs:
   build-and-upload:
     if: github.event_name == 'release'
     needs: notarization-preflight
-    # Runner must be darwin/arm64 with Rosetta 2, Xcode CLT, Homebrew, rustup, and zstd.
-    runs-on: [self-hosted, macOS, ARM64]
+    # Standard hosted Apple Silicon runner, free for this public repository.
+    runs-on: macos-15
     timeout-minutes: 120
     permissions:
       contents: write
@@ -66,6 +66,17 @@ jobs:
         run: rm -rf .build dist
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: prepare hosted toolchain
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          brew install uv zstd
+          rustup default stable
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          if ! arch -x86_64 /usr/bin/true >/dev/null 2>&1; then
+            sudo softwareupdate --install-rosetta --agree-to-license
+          fi
 
       - name: verify notarization credentials
         run: |
@@ -95,15 +106,15 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "Wrote version $VERSION to all version files"
 
-      # Self-hosted runner: use a throwaway keychain and put the user's keychain
+      # Use a throwaway keychain and put the runner's keychain
       # search list back afterwards, so nothing persists between runs.
       - name: import Developer ID certificate
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
           P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
           set -euo pipefail
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 32)"
           tmp="${RUNNER_TEMP:-$(mktemp -d)}"
           cert="$tmp/build_certificate.p12"
           keychain="$tmp/stemdeck-signing.keychain-db"

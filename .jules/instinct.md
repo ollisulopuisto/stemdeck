@@ -21,3 +21,14 @@ the pre-main Path(raw) constructors; retain main's normalization rather than
 suppress a finding. Native/full CI and CodeQL remain merge gates. No UI or
 model selection changes, no main push. Maintainer approved PR27 then PR32 and
 29-31 once green, then notarization PR and one release. Rollback: revert PR27.
+
+## Hosted-runner correction (Instinct, 2026-11-07)
+
+Owner corrected the runner model: GitHub-hosted, not self-hosted. Native Mac
+and Windows checks now use standard macos-15 and windows-latest. macOS release
+and credential preflight use macos-15 (Apple Silicon), install uv/zstd and Rust
+targets, and ensure Rosetta for Intel runtime generation. Signing uses a random
+throwaway keychain password, so no extra KEYCHAIN_PASSWORD secret is needed.
+GitHub docs confirm standard hosted jobs are free for this public repository:
+https://docs.github.com/en/actions/concepts/billing-and-usage
+No larger runners, artifact storage or additional services were added.
