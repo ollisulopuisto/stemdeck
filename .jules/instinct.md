@@ -12,6 +12,14 @@ app/DMG and not claimed notarized. Native CI/notary acceptance still pending.
 Maintainer approved this PR once green and one release after ordered merges.
 Rollback: revert this PR. No main push or credentials in source.
 
+## 2026-11-07 - PR32 conflict repair
+
+Keep main's newer normalized-root/NUL/absolute path guards and preserve the
+PR's raw forward/backslash traversal regression tests. Do not replace those
+checks with the older Path(raw) version flagged by CodeQL. No suppression or
+security baseline changes. Python syntax and focused lint/format pass locally;
+full tests need CI dependencies and CodeQL must pass before approved merge.
+
 ## 2026-11-07 - PR27 security conflict repair
 
 Instinct merges current main into PR27 without downgrading main's raw-input
