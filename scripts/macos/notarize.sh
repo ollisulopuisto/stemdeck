@@ -6,9 +6,11 @@ FILE="${1:?artifact required}"
 : "${APPLE_APP_PASSWORD:?Missing APPLE_APP_PASSWORD}"
 RESULT="$(mktemp)"
 trap 'rm -f "$RESULT"' EXIT
+export KEYCHAIN_PATH="${KEYCHAIN_PATH:-$(security default-keychain -d user | tr -d '"')}"
+export APPLE_TEAM_ID="${APPLE_TEAM_ID:-LWSR8T5392}"
+python3 "$(dirname "$0")/../macos_ci_credentials.py" store-notary-credentials
 xcrun notarytool submit "$FILE" \
-  --apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" \
-  --team-id "${APPLE_TEAM_ID:-LWSR8T5392}" --wait --output-format json > "$RESULT"
+  --keychain-profile ci-notary --keychain "$KEYCHAIN_PATH" --wait --output-format json > "$RESULT"
 python3 - "$RESULT" <<'PY'
 import json,sys
 result=json.load(open(sys.argv[1]))
