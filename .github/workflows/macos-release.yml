@@ -203,6 +203,8 @@ jobs:
             trap 'hdiutil detach "$mountpoint" >/dev/null 2>&1 || true; rmdir "$mountpoint" >/dev/null 2>&1 || true' EXIT
             test -d "$mountpoint/StemDeck.app"
             codesign --verify --strict --deep "$mountpoint/StemDeck.app"
+            python3 scripts/ci/test_verify_entitlements.py
+            python3 scripts/ci/verify_entitlements.py "$mountpoint/StemDeck.app"
             spctl --assess --type execute --verbose=2 "$mountpoint/StemDeck.app"
             expected=arm64
             [[ "$arch" != x64 ]] || expected=x86_64
