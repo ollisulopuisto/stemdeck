@@ -1,4 +1,5 @@
 import { fmtTime, fmtTickLabel, fmtTimeMs, parseTimecode, storeGet, storeSet } from "./utils.js";
+import { guardIme } from "./imeEnter.js";
 import { MIN_LOOP_SEC, loopDragResult } from "./loopRegion.js";
 import { tickStepAt } from "./rulerTicks.js";
 import {
@@ -417,17 +418,19 @@ function wireLoopInputs() {
       },
       { passive: false }
     );
-    input.addEventListener("keydown", (e) => {
-      if (e.isComposing || e.keyCode === 229) return;
-      if (e.key === "Enter") {
-        e.preventDefault();
-        input.blur();
-      } else if (e.key === "Escape") {
-        e.preventDefault();
-        input.value = fmtTimeMs(which === "start" ? loopStart : loopEnd);
-        input.blur();
-      }
-    });
+    input.addEventListener(
+      "keydown",
+      guardIme((e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          input.blur();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          input.value = fmtTimeMs(which === "start" ? loopStart : loopEnd);
+          input.blur();
+        }
+      }),
+    );
   }
   syncLoopInputs();
 }

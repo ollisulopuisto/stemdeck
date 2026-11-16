@@ -13,6 +13,7 @@ import {
   startQueueStream,
 } from "./queue.js";
 import { fmtTime, hostOf, isReimportableSource, storeGet, storeSet } from "./utils.js";
+import { guardIme } from "./imeEnter.js";
 import { notifyFailure, setReleasePending, dismissFailuresByJobId, dismissFailuresByKind } from "./notifications.js";
 import { initWhatsNew } from "./whatsNew.js";
 // Aliased (not the bare "t") -- this file already uses "t"/"tr" as local
@@ -4227,10 +4228,12 @@ async function wireSecretSetting(overlay, spec) {
   };
 
   input.addEventListener("input", syncSave);
-  input.addEventListener("keydown", (e) => {
-    if (e.isComposing || e.keyCode === 229) return;
-    if (e.key === "Enter" && input.value.trim()) send(input.value.trim());
-  });
+  input.addEventListener(
+    "keydown",
+    guardIme((e) => {
+      if (e.key === "Enter" && input.value.trim()) send(input.value.trim());
+    }),
+  );
   saveBtn.addEventListener("click", () => send(input.value.trim()));
   clearBtn.addEventListener("click", () => send(""));
   syncSave();
