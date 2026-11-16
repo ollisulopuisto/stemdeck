@@ -4228,6 +4228,7 @@ async function wireSecretSetting(overlay, spec) {
 
   input.addEventListener("input", syncSave);
   input.addEventListener("keydown", (e) => {
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === "Enter" && input.value.trim()) send(input.value.trim());
   });
   saveBtn.addEventListener("click", () => send(input.value.trim()));
