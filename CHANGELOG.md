@@ -24,6 +24,7 @@ notes; the full notes live on the upstream releases page. Entries under
 
 ### Fixed
 
+- Enter in a text field during IME composition (CJK input) no longer sends a library chat message or commits a section/loop-point edit; the keydown handlers return early while a composition is active.
 - MPS separations on Apple Silicon stay on the GPU when one operation is
   unsupported, instead of falling the whole run back to CPU.
 - Security hardening: job-ID sanitisation, origin validation on client
