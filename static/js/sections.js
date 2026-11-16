@@ -1,6 +1,7 @@
 // sections.js — interactive sections bar above the waveform
 
 import { onLanguageChange, t } from "./i18n.js";
+import { guardIme } from "./imeEnter.js";
 
 const SECTION_COLORS = [
   "#4a7fff",
@@ -577,14 +578,17 @@ function _openRename(id, labelEl) {
     _render();
   };
   input.addEventListener("blur", commit, { once: true });
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { e.preventDefault(); input.blur(); }
-    if (e.key === "Escape") {
-      e.preventDefault();
-      input.removeEventListener("blur", commit);
-      _render();
-    }
-  });
+  input.addEventListener(
+    "keydown",
+    guardIme((e) => {
+      if (e.key === "Enter") { e.preventDefault(); input.blur(); }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        input.removeEventListener("blur", commit);
+        _render();
+      }
+    }),
+  );
 }
 
 // ─── Persistence ──────────────────────────────────────────
