@@ -1,3 +1,4 @@
+mod atomic;
 mod certs;
 mod dragout;
 mod dropin;
@@ -487,7 +488,7 @@ fn main() {
                 // Only update the version file if write succeeds. If it fails, skip
                 // cleanup — a missing version file would otherwise cause every launch
                 // to wipe WebKit data.
-                if let Err(e) = fs::write(&version_file, current) {
+                if let Err(e) = atomic::write_atomic(&version_file, current) {
                     eprintln!("[stemdeck] failed to write version file, skipping cleanup: {e}");
                 }
             }
@@ -984,8 +985,8 @@ fn extract_runtime_pack() -> Result<RuntimePackStatus, String> {
         "runtimeSha256": manifest.runtime_sha256,
         "installedAt": unix_timestamp(),
     });
-    fs::write(
-        extracted.join("runtime-manifest.json"),
+    atomic::write_atomic(
+        &extracted.join("runtime-manifest.json"),
         serde_json::to_string_pretty(&install_manifest)
             .map_err(|e| format!("failed to serialize runtime install manifest: {e}"))?
             + "\n",
@@ -1214,7 +1215,7 @@ async fn download_app_update(
         // Record what was verified so apply_app_update can check the bytes it
         // is about to extract, rather than trusting that whatever now sits at
         // this path is what this function approved.
-        let _ = fs::write(app_sha_path(&downloads), plan.app_sha256.trim());
+        let _ = atomic::write_atomic(&app_sha_path(&downloads), plan.app_sha256.trim());
         Ok(())
     }
 }
