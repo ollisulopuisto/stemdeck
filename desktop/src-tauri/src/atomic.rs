@@ -13,10 +13,7 @@ use std::io::Write;
 use std::path::Path;
 
 pub fn write_atomic(path: &Path, contents: impl AsRef<[u8]>) -> std::io::Result<()> {
-    let name = path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("file");
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("file");
     let temp = path.with_file_name(format!(".{name}.{}.tmp", std::process::id()));
     let result = (|| {
         let mut file = fs::File::create(&temp)?;
