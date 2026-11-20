@@ -41,6 +41,7 @@ from app.core.config import (
     available_torch_devices,
     configure_portable_environment,
     ensure_runtime_dirs,
+    roformer_attempt_active,
     roformer_model_bytes,
     roformer_model_ready,
     roformer_unavailable_reason,
@@ -379,7 +380,7 @@ def _engine_status() -> dict[str, object]:
         "model_bytes": got,
         "model_total_bytes": ROFORMER_SW_APPROX_BYTES,
         "last_failure": roformer_last_failure(),
-        "downloading": get_separation_engine() == "roformer-sw" and not ready and got > 0,
+        "downloading": roformer_attempt_active() and not ready,
     }
 
 

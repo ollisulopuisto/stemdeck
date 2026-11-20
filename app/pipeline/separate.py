@@ -11,7 +11,13 @@ import threading
 import time
 from pathlib import Path
 
-from app.core.config import DEMUCS_MODEL, PREWARM_WORKER, SEPARATION_ENGINE, TIMEOUT_DEMUCS_STALL
+from app.core.config import (
+    DEMUCS_MODEL,
+    PREWARM_WORKER,
+    SEPARATION_ENGINE,
+    TIMEOUT_DEMUCS_STALL,
+    set_roformer_attempt_active,
+)
 from app.core.models import Job, JobCancelled, _set
 from app.core.registry import set_proc
 from app.core.settings import (
@@ -357,6 +363,10 @@ def separate(job: Job, source: Path, job_dir: Path) -> Path:
             reason = f"{ROFORMER_SW_MODEL} is not available on this machine"
             _use_demucs_instead(job, reason)
         else:
+            # The persistent Demucs worker holds ~350 MB. A Roformer job never uses it, so
+            # free it now; a later Demucs job or fallback respawns it through _get_worker.
+            _kill_worker()
+            set_roformer_attempt_active(True)
             try:
                 stems = separate_roformer(job, source, job_dir, device)
                 record_roformer_outcome(None)
@@ -365,6 +375,10 @@ def separate(job: Job, source: Path, job_dir: Path) -> Path:
                 if not from_settings:
                     raise
                 _use_demucs_instead(job, _roformer_failure_reason(e))
+            finally:
+                # Success, failure and cancel all end the attempt, so Settings stops
+                # reporting a download that is no longer happening.
+                set_roformer_attempt_active(False)
 
     rc, tail = _run_demucs(job, source, job_dir, device)
 

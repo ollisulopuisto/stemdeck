@@ -29,6 +29,7 @@ check('default', engineRowState({ separation_engine: 'demucs', separation_engine
 check('downloading', engineRowState({ separation_engine: 'roformer-sw', separation_engine_status: st({ downloading: true }) }) === 'downloading');
 check('in use', engineRowState({ separation_engine: 'roformer-sw', separation_engine_status: st({ model_ready: true }) }) === 'in-use');
 check('failed fallback', engineRowState({ separation_engine: 'roformer-sw', separation_engine_status: st({ last_failure: 'x' }) }) === 'failed');
+check('checkpoint bytes with no attempt running is the failure, not a download', engineRowState({ separation_engine: 'roformer-sw', separation_engine_status: st({ downloading: false, model_bytes: 1000, last_failure: 'x' }) }) === 'failed');
 check('missing status is the default', engineRowState({}) === 'default');
 
 check('percent from bytes', engineDownloadPercent({ model_bytes: 350, model_total_bytes: 700 }) === 50);

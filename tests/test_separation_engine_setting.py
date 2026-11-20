@@ -150,6 +150,7 @@ def test_download_progress_is_the_partial_checkpoint_size(client, tmp_path, monk
     _settings.set_separation_engine("roformer-sw", accept=True)
     monkeypatch.setattr(main_mod, "roformer_model_ready", lambda: False)
     monkeypatch.setattr(main_mod, "roformer_model_bytes", lambda: 290 * 1024 * 1024)
+    monkeypatch.setattr(main_mod, "roformer_attempt_active", lambda: True)
     status = client.get("/api/settings").json()["separation_engine_status"]
     assert status["downloading"] is True
     assert status["model_bytes"] == 290 * 1024 * 1024
@@ -301,3 +302,72 @@ def test_a_device_on_the_network_cannot_opt_in_while_network_access_is_off(can_r
         assert _settings.roformer_sw_accepted() is False
     finally:
         _settings.set_allow_network(True)
+
+
+def test_a_failed_first_run_with_checkpoint_bytes_is_not_a_download(
+    client, job_dir, monkeypatch, can_run
+):
+    """Checkpoint bytes on disk and no ready marker used to read as an active download
+    forever, hiding the fallback reason. Only a running attempt is a download."""
+    ckpt = _config.MODELS_DIR / "audio-separator" / _config.ROFORMER_SW_MODEL
+    ckpt.parent.mkdir(parents=True)
+    ckpt.write_bytes(b"x" * 1000)
+    _settings.set_separation_engine("roformer-sw", accept=True)
+    monkeypatch.setattr(sep_mod, "get_demucs_device", lambda: "cpu")
+    monkeypatch.setattr(rf_mod, "_spawn_cmd", _stub(_FAIL))
+    _demucs_stub(monkeypatch, job_dir)
+
+    seen = {}
+    real = rf_mod.separate_roformer
+
+    def spy(*a, **kw):
+        seen["during"] = client.get("/api/settings").json()["separation_engine_status"]
+        return real(*a, **kw)
+
+    monkeypatch.setattr("app.pipeline.roformer.separate_roformer", spy)
+    sep_mod.separate(Job(id="engine0000008"), job_dir / "song.wav", job_dir)
+
+    assert seen["during"]["downloading"] is True
+    after = client.get("/api/settings").json()["separation_engine_status"]
+    assert after["downloading"] is False
+    assert after["model_bytes"] == 1000  # progress data is kept
+    assert "checkpoint download failed" in after["last_failure"]
+
+
+def test_the_attempt_ends_when_the_job_is_cancelled(job_dir, monkeypatch, can_run):
+    from app.core.models import JobCancelled
+
+    _settings.set_separation_engine("roformer-sw", accept=True)
+    monkeypatch.setattr(sep_mod, "get_demucs_device", lambda: "cpu")
+
+    def cancelled(*a, **kw):
+        raise JobCancelled()
+
+    monkeypatch.setattr("app.pipeline.roformer.separate_roformer", cancelled)
+    with pytest.raises(JobCancelled):
+        sep_mod.separate(Job(id="engine0000009"), job_dir / "song.wav", job_dir)
+    assert _config.roformer_attempt_active() is False
+
+
+def test_the_demucs_worker_is_stopped_before_a_roformer_job_runs(job_dir, monkeypatch, can_run):
+    _settings.set_separation_engine("roformer-sw", accept=True)
+    monkeypatch.setattr(sep_mod, "get_demucs_device", lambda: "cpu")
+    events: list[str] = []
+    monkeypatch.setattr(sep_mod, "_kill_worker", lambda: events.append("kill-worker"))
+
+    def fake_roformer(job, source, job_dir_, device):
+        events.append("roformer")
+        return job_dir_ / "stems"
+
+    monkeypatch.setattr("app.pipeline.roformer.separate_roformer", fake_roformer)
+    sep_mod.separate(Job(id="engine0000010"), job_dir / "song.wav", job_dir)
+    assert events == ["kill-worker", "roformer"]
+
+
+def test_the_job_model_follows_the_job_not_the_environment():
+    from app.pipeline.runner import _job_model
+
+    assert _job_model(Job(id="m1", separation_engine="roformer-sw")) == _config.ROFORMER_SW_MODEL
+    assert _job_model(Job(id="m2", separation_engine="demucs")) == _config.DEMUCS_MODEL
+    # A job that never reached separation falls back to the environment's model.
+    assert _job_model(Job(id="m3")) == _config.active_separation_model()

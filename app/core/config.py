@@ -343,12 +343,33 @@ def roformer_model_ready() -> bool:
     return (MODELS_DIR / "audio-separator" / ROFORMER_SW_READY_MARKER).is_file()
 
 
+_ROFORMER_ATTEMPT_ACTIVE = False
+
+
+def set_roformer_attempt_active(active: bool) -> None:
+    """Mark a BS-Roformer-SW attempt as running (fetching the model or separating). Checkpoint
+    bytes alone cannot say that: a failed first run leaves them on disk with no ready marker."""
+    global _ROFORMER_ATTEMPT_ACTIVE
+    _ROFORMER_ATTEMPT_ACTIVE = active
+
+
+def roformer_attempt_active() -> bool:
+    return _ROFORMER_ATTEMPT_ACTIVE
+
+
 def roformer_model_bytes() -> int:
     """Bytes of the checkpoint on disk so far (a partial download counts)."""
     try:
         return (MODELS_DIR / "audio-separator" / ROFORMER_SW_MODEL).stat().st_size
     except OSError:
         return 0
+
+
+def separation_model_for(engine: str | None) -> str | None:
+    """The model name for one job's engine, or None when the job has none recorded."""
+    if engine == "roformer-sw":
+        return ROFORMER_SW_MODEL
+    return DEMUCS_MODEL if engine == "demucs" else None
 
 
 def active_separation_model() -> str:
