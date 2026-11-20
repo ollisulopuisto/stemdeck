@@ -29,6 +29,8 @@ use rcgen::{CertificateParams, DistinguishedName, DnType, KeyPair, SanType};
 use serde::{Deserialize, Serialize};
 use time::{Duration as TimeDuration, OffsetDateTime};
 
+use crate::atomic::write_atomic;
+
 /// Safari rejects a server certificate whose lifetime exceeds 398 days, and
 /// has since 2020. Self-signed is no exemption, so a ten-year certificate
 /// would fail on exactly the device this feature exists for. 397 days keeps a
@@ -152,13 +154,13 @@ pub fn ensure(data_dir: &Path) -> Result<LanCertificate, String> {
     // Key first: a certificate with no key beside it would be picked up as
     // usable on the next launch and fail at bind instead of regenerating.
     write_private(&key, &key_pair.serialize_pem())?;
-    fs::write(&cert, signed.pem())
+    write_atomic(&cert, signed.pem())
         .map_err(|e| format!("could not write {}: {e}", cert.display()))?;
     let meta = CertMeta {
         ips: want,
         not_after: not_after.unix_timestamp(),
     };
-    fs::write(
+    write_atomic(
         &meta_path,
         serde_json::to_string_pretty(&meta).unwrap_or_default(),
     )
@@ -172,7 +174,7 @@ pub fn ensure(data_dir: &Path) -> Result<LanCertificate, String> {
 /// It never leaves this machine, but it is still a private key, and the data
 /// directory of a portable install can sit somewhere shared.
 fn write_private(path: &Path, pem: &str) -> Result<(), String> {
-    fs::write(path, pem).map_err(|e| format!("could not write {}: {e}", path.display()))?;
+    write_atomic(path, pem).map_err(|e| format!("could not write {}: {e}", path.display()))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
