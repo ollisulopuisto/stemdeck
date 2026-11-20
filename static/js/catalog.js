@@ -6,6 +6,7 @@ import { audioEngine, bpmChip, foregroundJobId, keyChip, multitrack, saveSelecte
 import { refreshStemChoiceVisuals } from "./stemChoice.js";
 import { trackFormat, formatIconSvg, paintNowPlayingArt } from "./formatIcon.js";
 import { formatKey } from "./keyLabel.js";
+import { engineBadgeLabel, engineRowState, engineDownloadPercent } from "./engineLabel.js";
 import { showError, importFromUrl, detachForegroundJob, runVocalSplitIfWanted } from "./job.js";
 import {
   cancelQueuedJob, currentIds, getQueueSnapshot, isPaused, onJobSettled, onQueueChange,
@@ -766,6 +767,8 @@ function stateMetadataToTrack(state, fallbackTrack) {
     sectionsSource: state.sections_source ?? fallbackTrack.sectionsSource ?? null,
     sourceUrl: state.source_url || fallbackTrack.sourceUrl,
     sourceFormat: state.source_format ?? fallbackTrack.sourceFormat ?? null,
+    separationEngine: state.separation_engine ?? fallbackTrack.separationEngine ?? null,
+    engineFallback: state.engine_fallback ?? fallbackTrack.engineFallback ?? null,
     // The source's own artist, title, album and lyrics (#699), read at import.
     audioTags: state.audio_tags ? libraryAudioTags(state.audio_tags) : fallbackTrack.audioTags ?? null,
     mixUrl: state.mix_url ?? fallbackTrack.mixUrl ?? null,
@@ -1874,6 +1877,8 @@ function trackSublineHtml(track, { inTrash = false } = {}) {
     parts = [track.duration ? fmtTime(track.duration) : ""];
   }
   if (inTrash) parts.push(i18nT("track.removed"));
+  // Only a non-default engine or a fallback is worth a word; see engineLabel.js.
+  if (!PROCESSING_STATUSES.has(track.status)) parts.push(engineBadgeLabel(track, i18nT));
   // Spaced as text as well as by the row's flex gap, so what a screen reader
   // or a copy gets reads "05:57 · 6 stems" rather than "05:57·6 stems".
   return parts
@@ -4291,6 +4296,9 @@ async function wireGeneralSettings(overlay) {
   const deviceDesc = overlay.querySelector(".set-demucs-desc");
   const qualitySel = overlay.querySelector(".set-separation-quality");
   const transcribeSel = overlay.querySelector(".set-transcribe-lyrics");
+  const engineCards = [...overlay.querySelectorAll(".engine-card")];
+  const engineState = overlay.querySelector(".engine-state");
+  let enginePoll = null;
   const cookiesInput = overlay.querySelector(".set-cookies-file");
   const cookiesMsg = overlay.querySelector(".cookies-file-msg");
   const autoDeleteInput = overlay.querySelector(".auto-delete-input");
@@ -4312,6 +4320,45 @@ async function wireGeneralSettings(overlay) {
     if (autoDeleteDays) autoDeleteDays.disabled = !on;
   };
 
+  const paintEngineRow = (d) => {
+    const state = engineRowState(d);
+    const status = d.separation_engine_status || {};
+    for (const card of engineCards) {
+      const on = card.dataset.engine === d.separation_engine;
+      card.setAttribute("aria-checked", String(on));
+      card.classList.toggle("selected", on);
+      if (card.dataset.engine === "roformer-sw") {
+        const blocked = state === "intel" || state === "unavailable";
+        card.disabled = blocked;
+        card.classList.toggle("disabled", blocked);
+      }
+    }
+    const text = {
+      intel: i18nT("engine.state.intel"),
+      unavailable: i18nT("engine.state.unavailable"),
+      downloading: i18nT("engine.state.downloading", { percent: engineDownloadPercent(status) }),
+      "in-use": i18nT("engine.state.inUse"),
+      failed: i18nT("engine.state.failed", { reason: status.last_failure || "" }),
+      default: "",
+    }[state];
+    engineState.hidden = !text;
+    engineState.textContent = text;
+    engineState.dataset.state = state;
+    // The model is large, so show the download as it grows instead of a
+    // frozen label. Stops when the row leaves the downloading state or closes.
+    clearInterval(enginePoll);
+    enginePoll = null;
+    if (state === "downloading") {
+      enginePoll = setInterval(async () => {
+        if (!overlay.isConnected) { clearInterval(enginePoll); return; }
+        try {
+          const r = await fetch("/api/settings", { cache: "no-store" });
+          if (r.ok) paintEngineRow(await r.json());
+        } catch { /* try again next tick */ }
+      }, 3000);
+    }
+  };
+
   const apply = (d) => {
     if (durInput && d.max_duration_sec) durInput.value = String(Math.round(d.max_duration_sec / 60));
     // Same reason: the copy in the description text went stale alongside the
@@ -4327,6 +4374,7 @@ async function wireGeneralSettings(overlay) {
     if (portInput && d.port) portInput.value = String(d.port);
     if (qualitySel && d.separation_quality) qualitySel.value = d.separation_quality;
     if (transcribeSel && d.transcribe_lyrics) transcribeSel.value = d.transcribe_lyrics;
+    if (engineState && d.separation_engine) paintEngineRow(d);
     // Unset is the normal case, so read the key rather than truthiness --
     // clearing the field must survive the round trip and not be repopulated.
     if (cookiesInput && "cookies_file" in d) cookiesInput.value = d.cookies_file || "";
@@ -4414,6 +4462,25 @@ async function wireGeneralSettings(overlay) {
     } catch { /* ignore */ }
     return null;
   };
+
+  const setEngine = async (patch) => {
+    const data = await post(patch);
+    if (!data && engineState) {
+      engineState.hidden = false;
+      engineState.dataset.state = "failed";
+      engineState.textContent = i18nT("engine.saveFailed");
+    }
+  };
+  for (const card of engineCards) {
+    card.addEventListener("click", () => {
+      if (card.disabled || card.getAttribute("aria-checked") === "true") return;
+      if (card.dataset.engine === "roformer-sw") {
+        openEngineConfirm(() => setEngine({ separation_engine: "roformer-sw", roformer_sw_accept: true }));
+      } else {
+        setEngine({ separation_engine: "demucs" });
+      }
+    });
+  }
 
   durInput?.addEventListener("change", () => {
     // No ceiling of its own. This used to clamp to 20 while the backend
@@ -4729,6 +4796,44 @@ async function exportLogs(btn) {
   }
 }
 
+let engineConfirmOverlay = null;
+
+function closeEngineConfirm() {
+  engineConfirmOverlay?.remove();
+  engineConfirmOverlay = null;
+}
+
+// Picking BS-Roformer-SW downloads a large model with no stated licence, so it
+// takes an explicit yes. The same shell as the reset dialog, without the red.
+function openEngineConfirm(onConfirm) {
+  closeEngineConfirm();
+  const overlay = document.createElement("div");
+  overlay.className = "reset-confirm-backdrop";
+  overlay.innerHTML = `
+    <div class="reset-confirm-card engine-confirm" role="dialog" aria-modal="true" aria-label="Use BS-Roformer-SW" data-i18n-aria-label="engine.confirm.ariaLabel">
+      <div class="reset-confirm-title engine-confirm-title" data-i18n="engine.confirm.title">Use BS-Roformer-SW?</div>
+      <p class="reset-confirm-body" data-i18n="engine.confirm.download"></p>
+      <p class="reset-confirm-body" data-i18n="engine.confirm.licence"></p>
+      <p class="reset-confirm-body" data-i18n="engine.confirm.slower"></p>
+      <div class="reset-confirm-actions">
+        <button class="reset-confirm-cancel" type="button" data-i18n="engine.confirm.cancel">Cancel</button>
+        <button class="engine-confirm-go" type="button" data-i18n="engine.confirm.go">I understand, use it</button>
+      </div>
+    </div>
+  `;
+  applyTranslations(overlay);
+  overlay.querySelector(".reset-confirm-cancel").addEventListener("click", closeEngineConfirm);
+  overlay.addEventListener("mousedown", (e) => { if (e.target === overlay) closeEngineConfirm(); });
+  document.addEventListener("keydown", (e) => { if (e.code === "Escape") closeEngineConfirm(); }, { once: true });
+  overlay.querySelector(".engine-confirm-go").addEventListener("click", () => {
+    closeEngineConfirm();
+    onConfirm();
+  });
+  engineConfirmOverlay = overlay;
+  document.body.appendChild(overlay);
+  overlay.querySelector(".engine-confirm-go").focus();
+}
+
 let resetConfirmOverlay = null;
 
 function closeResetConfirm() {
@@ -4939,6 +5044,25 @@ function openLibraryEditor() {
         <div class="library-editor-foot">
           <span class="library-editor-status" aria-live="polite"></span>
           <button class="library-editor-sync" type="button" data-i18n="settings.outOfSync.resync">Resync out of sync tracks</button>
+        </div>
+        <div class="settings-section engine-section">
+          <div class="settings-row engine-head">
+            <div class="settings-row-text">
+              <div class="settings-row-title" data-i18n="engine.title">Separation engine</div>
+              <div class="settings-row-desc" data-i18n="engine.desc">Which model splits a song into stems. Changing it affects new tracks only.</div>
+            </div>
+          </div>
+          <div class="engine-cards" role="radiogroup" aria-label="Separation engine" data-i18n-aria-label="engine.title">
+            <button type="button" class="engine-card" role="radio" data-engine="demucs" aria-checked="true">
+              <span class="engine-card-name" data-i18n="engine.demucs.name">Demucs htdemucs_6s</span>
+              <span class="engine-card-desc" data-i18n="engine.demucs.desc">Default. Bundled, fast, six stems.</span>
+            </button>
+            <button type="button" class="engine-card" role="radio" data-engine="roformer-sw" aria-checked="false">
+              <span class="engine-card-name" data-i18n="engine.roformer.name">BS-Roformer-SW</span>
+              <span class="engine-card-desc" data-i18n="engine.roformer.desc">Cleaner stems, slower. Downloads about 700 MB the first time you use it.</span>
+            </button>
+          </div>
+          <div class="engine-state" role="status" aria-live="polite" hidden></div>
         </div>
         <div class="settings-section">
           <div class="settings-row">

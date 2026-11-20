@@ -33,14 +33,18 @@ from app.core.config import (
     HTTPS_PORT,
     JOBS_DIR,
     LOGS_DIR,
-    SEPARATION_ENGINE,
+    ROFORMER_SW_APPROX_BYTES,
+    ROFORMER_SW_MODEL,
     SSL_CERTFILE,
     SSL_KEYFILE,
     STATIC_DIR,
-    active_separation_model,
     available_torch_devices,
     configure_portable_environment,
     ensure_runtime_dirs,
+    roformer_attempt_active,
+    roformer_model_bytes,
+    roformer_model_ready,
+    roformer_unavailable_reason,
     torch_load_error,
 )
 from app.core.logging_setup import configure_logging
@@ -71,9 +75,12 @@ from app.core.settings import (
     get_max_duration_sec,
     get_playlist_max_items,
     get_port,
+    get_separation_engine,
     get_separation_quality,
     get_transcribe_lyrics,
     get_video_max_height,
+    roformer_last_failure,
+    roformer_sw_accepted,
     set_acoustid_api_key,
     set_allow_network,
     set_auto_delete_days,
@@ -87,6 +94,7 @@ from app.core.settings import (
     set_max_duration_sec,
     set_playlist_max_items,
     set_port,
+    set_separation_engine,
     set_separation_quality,
     set_transcribe_lyrics,
     set_video_max_height,
@@ -317,8 +325,10 @@ def health() -> dict[str, object]:
         "version": app_version(),
         "ffmpeg_configured": FFMPEG_BIN.is_file(),
         "demucs_model": DEMUCS_MODEL,
-        "separation_engine": SEPARATION_ENGINE,
-        "separation_model": active_separation_model(),
+        "separation_engine": get_separation_engine(),
+        "separation_model": (
+            ROFORMER_SW_MODEL if get_separation_engine() == "roformer-sw" else DEMUCS_MODEL
+        ),
         "demucs_device": get_demucs_device(),
         # Who is answering. The desktop shell spawns this backend and then polls
         # this endpoint to know it came up -- but a 200 alone only proves
@@ -353,6 +363,27 @@ def _is_lan_ipv4(ip: str) -> bool:
     return len(parts) == 4 and all(p.isdigit() for p in parts)
 
 
+def _engine_status() -> dict[str, object]:
+    """What the Settings engine row needs to know about BS-Roformer-SW on this machine.
+
+    ``roformer_unavailable_reason`` is "intel-mac" or "not-installed" when it cannot run.
+    ``model_bytes`` is what is on disk so far, so a download in progress shows as a fraction of
+    the approximate total; ``model_ready`` is set only after a first successful run."""
+    reason = roformer_unavailable_reason()
+    ready = roformer_model_ready()
+    got = 0 if ready else roformer_model_bytes()
+    return {
+        "roformer_available": reason is None,
+        "roformer_unavailable_reason": reason,
+        "roformer_accepted": roformer_sw_accepted(),
+        "model_ready": ready,
+        "model_bytes": got,
+        "model_total_bytes": ROFORMER_SW_APPROX_BYTES,
+        "last_failure": roformer_last_failure(),
+        "downloading": roformer_attempt_active() and not ready,
+    }
+
+
 def _settings_payload() -> dict[str, object]:
     return {
         "allow_network": get_allow_network(),
@@ -380,6 +411,9 @@ def _settings_payload() -> dict[str, object]:
         # Whisper lyrics for a job no lookup found any for: "auto" (on a GPU
         # only) | "on" | "off".
         "transcribe_lyrics": get_transcribe_lyrics(),
+        # Which model separates the next import, and whether BS-Roformer-SW can be used here.
+        "separation_engine": get_separation_engine(),
+        "separation_engine_status": _engine_status(),
         # Absent unless the user set one. Only the path is exposed, never the
         # file's contents -- those are the user's YouTube session.
         "cookies_file": get_cookies_file(),
@@ -530,6 +564,13 @@ async def update_settings(request: Request) -> dict[str, object]:
     if "transcribe_lyrics" in body:
         try:
             set_transcribe_lyrics(str(body["transcribe_lyrics"]))
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e)) from None
+    if "separation_engine" in body:
+        try:
+            set_separation_engine(
+                str(body["separation_engine"]), accept=body.get("roformer_sw_accept") is True
+            )
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e)) from None
     return _settings_payload()

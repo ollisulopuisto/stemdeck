@@ -105,6 +105,8 @@ that table's stem list; that has not been run on real audio here.
 
 ## BS-Roformer-SW (opt-in six-stem engine)
 
+Settings > General > Separation engine switches it on after a confirm dialog. A Settings pick wins over the env vars and falls back to Demucs (with a notice) if the model cannot be fetched or run; an engine chosen only by env var still fails the job as before. The env vars below keep working.
+
 Selected with `STEMDECK_SEPARATION_ENGINE=roformer-sw`. Default stays Demucs
 `htdemucs_6s`; nothing changes unless this is set.
 

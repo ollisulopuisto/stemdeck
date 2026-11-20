@@ -316,6 +316,62 @@ ROFORMER_SW_NOTICE = (
 )
 
 
+# Approximate size of BS-Roformer-SW.ckpt (docs/models.md says about 700 MB). Only used to
+# show download progress; the real size is whatever audio-separator fetches.
+ROFORMER_SW_APPROX_BYTES = 700 * 1024 * 1024
+# Written after the first successful BS-Roformer-SW separation, so the UI can say the
+# model is on disk without trusting a possibly truncated .ckpt.
+ROFORMER_SW_READY_MARKER = "roformer-sw.ready"
+
+
+def roformer_unavailable_reason() -> str | None:
+    """Why BS-Roformer-SW cannot run on this machine, or None when it can.
+
+    Intel Macs keep the old torch pin and get no audio-separator (docs/models.md), so the
+    engine is not there at all. A machine without the package says so too."""
+    import importlib.util
+    import platform
+
+    if sys.platform == "darwin" and platform.machine() == "x86_64":
+        return "intel-mac"
+    if importlib.util.find_spec("audio_separator") is None:
+        return "not-installed"
+    return None
+
+
+def roformer_model_ready() -> bool:
+    return (MODELS_DIR / "audio-separator" / ROFORMER_SW_READY_MARKER).is_file()
+
+
+_ROFORMER_ATTEMPT_ACTIVE = False
+
+
+def set_roformer_attempt_active(active: bool) -> None:
+    """Mark a BS-Roformer-SW attempt as running (fetching the model or separating). Checkpoint
+    bytes alone cannot say that: a failed first run leaves them on disk with no ready marker."""
+    global _ROFORMER_ATTEMPT_ACTIVE
+    _ROFORMER_ATTEMPT_ACTIVE = active
+
+
+def roformer_attempt_active() -> bool:
+    return _ROFORMER_ATTEMPT_ACTIVE
+
+
+def roformer_model_bytes() -> int:
+    """Bytes of the checkpoint on disk so far (a partial download counts)."""
+    try:
+        return (MODELS_DIR / "audio-separator" / ROFORMER_SW_MODEL).stat().st_size
+    except OSError:
+        return 0
+
+
+def separation_model_for(engine: str | None) -> str | None:
+    """The model name for one job's engine, or None when the job has none recorded."""
+    if engine == "roformer-sw":
+        return ROFORMER_SW_MODEL
+    return DEMUCS_MODEL if engine == "demucs" else None
+
+
 def active_separation_model() -> str:
     """The model that actually separates jobs, for logs/health/failure files."""
     return ROFORMER_SW_MODEL if SEPARATION_ENGINE == "roformer-sw" else DEMUCS_MODEL

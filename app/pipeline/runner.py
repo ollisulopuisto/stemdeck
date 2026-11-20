@@ -16,6 +16,7 @@ from app.core.config import (
     LYRICS_LOOKUP_GRACE_SEC,
     TIMEOUT_FFMPEG,
     active_separation_model,
+    separation_model_for,
 )
 from app.core.models import Job, JobCancelled, _set, settle_cancelled
 from app.core.redact import redact
@@ -337,6 +338,12 @@ def _run_local_blocking(job: Job, source_path: Path, job_dir: Path) -> None:
     _run_with_band_lookup(job, source, job_dir)
 
 
+def _job_model(job: Job) -> str:
+    """The model that separated (or tried to separate) this job. A Settings pick is not in
+    the environment, so asking the environment would name Demucs for a Roformer job."""
+    return separation_model_for(job.separation_engine) or active_separation_model()
+
+
 def _write_metadata(job: Job, job_dir: Path) -> None:
     meta = {
         "title": job.title,
@@ -362,6 +369,8 @@ def _write_metadata(job: Job, job_dir: Path) -> None:
         "video_status": job.video_status,
         "compute_device": job.compute_device,
         "gpu_fallback": job.gpu_fallback,
+        "separation_engine": job.separation_engine,
+        "engine_fallback": job.engine_fallback,
         "stage_timings": job.stage_timings,
     }
     try:
@@ -416,7 +425,7 @@ def _quarantine_failed_job(job: Job, job_dir: Path, jobs_dir: Path, exc: Excepti
             f"source: {job.source_url or '(unknown)'}",
             f"stage: {job.stage_message}",
             f"device: {job.compute_device or getattr(exc, 'device', None) or '(not reached)'}",
-            f"model: {active_separation_model()}",
+            f"model: {_job_model(job)}",
             f"cause: {cause}",
             f"timings: {json.dumps(job.stage_timings) if job.stage_timings else '(none)'}",
             f"exception: {redact(repr(exc))}",
@@ -503,7 +512,7 @@ async def _run_async(
         "[%s] done device=%s model=%s %s total=%.1fs",
         job.id,
         job.compute_device or "n/a",
-        active_separation_model(),
+        _job_model(job),
         " ".join(f"{k}={v}s" for k, v in t.items()),
         sum(t.values()),
     )

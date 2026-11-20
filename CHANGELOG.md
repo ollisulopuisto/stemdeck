@@ -12,6 +12,11 @@ notes; the full notes live on the upstream releases page. Entries under
 
 ### Added
 
+- Settings > Separation engine: choose Demucs or BS-Roformer-SW without env vars.
+  Picking BS-Roformer-SW asks first (about 700 MB download on first use, no
+  stated weight licence), shows download progress, falls back to Demucs with a
+  notice if it fails, and is disabled on Intel Macs. Library cards show the
+  engine only for BS-Roformer-SW or a fallback. The env vars still work.
 - What's New panel: after an upgrade the studio shows what changed, and the
   full release history is always available from the About dialog (this fork).
 - Optional BS-Roformer-SW six-stem separation engine (vocals, drums, bass,
