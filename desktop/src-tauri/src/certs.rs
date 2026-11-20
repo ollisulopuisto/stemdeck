@@ -29,7 +29,7 @@ use rcgen::{CertificateParams, DistinguishedName, DnType, KeyPair, SanType};
 use serde::{Deserialize, Serialize};
 use time::{Duration as TimeDuration, OffsetDateTime};
 
-use crate::atomic::write_atomic;
+use crate::atomic::{write_atomic, write_atomic_private};
 
 /// Safari rejects a server certificate whose lifetime exceeds 398 days, and
 /// has since 2020. Self-signed is no exemption, so a ten-year certificate
@@ -174,7 +174,8 @@ pub fn ensure(data_dir: &Path) -> Result<LanCertificate, String> {
 /// It never leaves this machine, but it is still a private key, and the data
 /// directory of a portable install can sit somewhere shared.
 fn write_private(path: &Path, pem: &str) -> Result<(), String> {
-    write_atomic(path, pem).map_err(|e| format!("could not write {}: {e}", path.display()))?;
+    write_atomic_private(path, pem)
+        .map_err(|e| format!("could not write {}: {e}", path.display()))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;

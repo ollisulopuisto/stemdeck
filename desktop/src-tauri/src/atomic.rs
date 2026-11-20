@@ -12,20 +12,67 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 
+/// Replace `path` with `contents`. The file gets the default permissions.
 pub fn write_atomic(path: &Path, contents: impl AsRef<[u8]>) -> std::io::Result<()> {
+    write_inner(path, contents.as_ref(), false)
+}
+
+/// Same, for secrets: the temp file is created owner-only (0600 on Unix) from the first
+/// byte, so there is no window in which another user could read it, and the renamed
+/// file keeps those permissions.
+pub fn write_atomic_private(path: &Path, contents: impl AsRef<[u8]>) -> std::io::Result<()> {
+    write_inner(path, contents.as_ref(), true)
+}
+
+fn create_temp(temp: &Path, private: bool) -> std::io::Result<fs::File> {
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        if private {
+            options.mode(0o600);
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = private;
+    options.open(temp)
+}
+
+/// Flush the rename itself. Without this the new directory entry can be lost on power
+/// loss even though the file contents were synced. Best effort: Windows cannot open a
+/// directory for syncing, and the file is already replaced either way.
+fn sync_directory(dir: &Path) {
+    #[cfg(unix)]
+    {
+        if let Ok(handle) = fs::File::open(dir) {
+            let _ = handle.sync_all();
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = dir;
+}
+
+fn write_inner(path: &Path, contents: &[u8], private: bool) -> std::io::Result<()> {
     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("file");
     let temp = path.with_file_name(format!(".{name}.{}.tmp", std::process::id()));
+    // A leftover temp from a crashed earlier run would make create_new fail.
+    let _ = fs::remove_file(&temp);
     let result = (|| {
-        let mut file = fs::File::create(&temp)?;
-        file.write_all(contents.as_ref())?;
+        let mut file = create_temp(&temp, private)?;
+        file.write_all(contents)?;
         file.sync_all()?;
         drop(file);
         fs::rename(&temp, path)
     })();
     if result.is_err() {
         let _ = fs::remove_file(&temp);
+        return result;
     }
-    result
+    if let Some(dir) = path.parent() {
+        sync_directory(dir);
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -75,5 +122,41 @@ mod tests {
     fn it_fails_when_the_directory_is_missing() {
         let dir = tempfile::tempdir().unwrap();
         assert!(write_atomic(&dir.path().join("nope/state.json"), "x").is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_private_write_is_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("key.pem");
+        write_atomic_private(&path, "secret").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "secret");
+        let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_private_replace_never_widens_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("key.pem");
+        write_atomic_private(&path, "one").unwrap();
+        write_atomic_private(&path, "two").unwrap();
+        let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+        assert_eq!(fs::read_to_string(&path).unwrap(), "two");
+    }
+
+    #[test]
+    fn a_stale_temp_file_from_a_crashed_run_does_not_block_the_write() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.json");
+        let stale = dir.path().join(format!(".state.json.{}.tmp", std::process::id()));
+        fs::write(&stale, "junk").unwrap();
+        write_atomic(&path, "fresh").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "fresh");
+        assert!(!stale.exists());
     }
 }
