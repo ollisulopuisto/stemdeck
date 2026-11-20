@@ -281,3 +281,23 @@ def test_the_last_fallback_reason_is_kept_for_settings_and_cleared_by_a_success(
     monkeypatch.setattr(rf_mod, "_spawn_cmd", _stub(_SUCCESS))
     sep_mod.separate(Job(id="engine0000007"), job_dir / "song.wav", job_dir)
     assert client.get("/api/settings").json()["separation_engine_status"]["last_failure"] is None
+
+
+def test_a_device_on_the_network_cannot_opt_in_while_network_access_is_off(can_run):
+    """allow_network gates other devices reaching the app, not outbound traffic.
+    So the guarantee for the model download is: with network access off, only the
+    host machine can give the consent that starts it."""
+    from app.main import app
+
+    _settings.set_allow_network(False)
+    try:
+        with TestClient(app, client=("203.0.113.9", 50000)) as remote:
+            r = remote.post(
+                "/api/settings",
+                json={"separation_engine": "roformer-sw", "roformer_sw_accept": True},
+            )
+        assert r.status_code == 403
+        assert _settings.get_separation_engine() == "demucs"
+        assert _settings.roformer_sw_accepted() is False
+    finally:
+        _settings.set_allow_network(True)
