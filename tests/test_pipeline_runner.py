@@ -653,6 +653,26 @@ def test_metadata_includes_sections_and_source(tmp_path: Path):
     assert meta["sections_source"] == "automatic"
 
 
+def test_a_failed_metadata_write_keeps_the_previous_metadata(tmp_path: Path):
+    """metadata.json is the record restore() rebuilds a library entry from: an interrupted
+    rewrite must leave the old one readable, not an empty or half-written file."""
+    import json as _json
+    import os
+
+    job = Job(id="abcdefabc115", title="New title")
+    job_dir = tmp_path / job.id
+    job_dir.mkdir()
+    (job_dir / "metadata.json").write_text(_json.dumps({"title": "Old title"}), encoding="utf-8")
+
+    with patch.object(os, "replace", side_effect=OSError("disk full")):
+        _write_metadata(job, job_dir)
+
+    assert _json.loads((job_dir / "metadata.json").read_text(encoding="utf-8")) == {
+        "title": "Old title"
+    }
+    assert [p.name for p in job_dir.iterdir()] == ["metadata.json"]
+
+
 def test_section_flag_is_captured_at_submit_not_at_the_sections_stage(tmp_path: Path):
     """Turning the toggle off mid-import must not rob the running job.
 

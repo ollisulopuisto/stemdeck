@@ -10,6 +10,7 @@ import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
+from app.core.atomic_json import write_json_atomic
 from app.core.config import (
     IDENTIFY_GRACE_SEC,
     LYRICS_IDENTITY_WAIT_SEC,
@@ -365,7 +366,7 @@ def _write_metadata(job: Job, job_dir: Path) -> None:
         "stage_timings": job.stage_timings,
     }
     try:
-        (job_dir / "metadata.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+        write_json_atomic(job_dir / "metadata.json", meta)
     except OSError:
         logger.warning("could not write metadata.json for job %s", job.id, exc_info=True)
 
