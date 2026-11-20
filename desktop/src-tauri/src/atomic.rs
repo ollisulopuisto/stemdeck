@@ -153,7 +153,9 @@ mod tests {
     fn a_stale_temp_file_from_a_crashed_run_does_not_block_the_write() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("state.json");
-        let stale = dir.path().join(format!(".state.json.{}.tmp", std::process::id()));
+        let stale = dir
+            .path()
+            .join(format!(".state.json.{}.tmp", std::process::id()));
         fs::write(&stale, "junk").unwrap();
         write_atomic(&path, "fresh").unwrap();
         assert_eq!(fs::read_to_string(&path).unwrap(), "fresh");
