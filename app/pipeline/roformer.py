@@ -21,13 +21,16 @@ import time
 from pathlib import Path
 
 from app.core.config import (
+    MODELS_DIR,
     ROFORMER_OUT_DIRNAME,
     ROFORMER_SW_MODEL,
+    ROFORMER_SW_READY_MARKER,
     STEM_NAMES,
     TIMEOUT_DEMUCS_STALL,
 )
 from app.core.models import Job, JobCancelled, _set
 from app.core.registry import set_proc
+from app.core.settings import roformer_sw_accepted
 from app.pipeline.errors import SeparationError
 
 logger = logging.getLogger("stemdeck.pipeline")
@@ -52,6 +55,9 @@ def separate_roformer(job: Job, source: Path, job_dir: Path, device: str) -> Pat
     env = os.environ.copy()
     env["STEMDECK_PARENT_PID"] = str(os.getpid())
     env["PYTHONIOENCODING"] = "utf-8:replace"
+    if roformer_sw_accepted():
+        # The user confirmed in Settings (or set the variable); the worker only reads the env.
+        env["STEMDECK_ROFORMER_SW_ACCEPT"] = "1"
     try:
         import certifi
 
@@ -148,4 +154,15 @@ def separate_roformer(job: Job, source: Path, job_dir: Path, device: str) -> Pat
             f"{ROFORMER_SW_MODEL} reported success but did not write: {', '.join(missing)}",
             device=device,
         )
+    _mark_model_ready()
     return out_dir
+
+
+def _mark_model_ready() -> None:
+    """Record that the model downloaded and ran once, so Settings can say it is on disk."""
+    try:
+        marker = MODELS_DIR / "audio-separator" / ROFORMER_SW_READY_MARKER
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text("ok\n", encoding="utf-8")
+    except OSError:
+        logger.warning("could not write the BS-Roformer-SW ready marker", exc_info=True)

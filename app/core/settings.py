@@ -677,6 +677,82 @@ def transcribe_lyrics_enabled(device: str | None) -> bool:
     return choice == "on"
 
 
+# ── separation_engine ──
+# Which model separates the next import: "demucs" (htdemucs_6s, default) or "roformer-sw"
+# (BS-Roformer-SW, opt-in). STEMDECK_SEPARATION_ENGINE seeds the default for env-based
+# deployments and keeps working; a value saved here wins over it. The weights have no stated
+# licence (docs/models.md), so choosing roformer-sw needs an explicit accept, remembered as
+# `roformer_sw_accepted`; STEMDECK_ROFORMER_SW_ACCEPT=1 still counts as one. Read per job.
+_ENGINE_CHOICES = ("demucs", "roformer-sw")
+
+
+def get_separation_engine() -> str:
+    from app.core.config import SEPARATION_ENGINE
+
+    with _LOCK:
+        v = _ensure().get("separation_engine")
+        return v if isinstance(v, str) and v in _ENGINE_CHOICES else SEPARATION_ENGINE
+
+
+def separation_engine_from_settings() -> bool:
+    """True when the engine was picked in Settings rather than by the environment."""
+    with _LOCK:
+        v = _ensure().get("separation_engine")
+        return isinstance(v, str) and v in _ENGINE_CHOICES
+
+
+def roformer_sw_accepted() -> bool:
+    from app.core.config import ROFORMER_SW_ACCEPTED
+
+    with _LOCK:
+        return ROFORMER_SW_ACCEPTED or _ensure().get("roformer_sw_accepted") is True
+
+
+def set_separation_engine(value: str, accept: bool = False) -> str:
+    """Choose the engine. roformer-sw needs ``accept`` (or an earlier accept) and a machine
+    that can run it; both are refused with a message the UI shows as is."""
+    from app.core.config import roformer_unavailable_reason
+
+    choice = (value or "").strip().lower()
+    if choice not in _ENGINE_CHOICES:
+        raise ValueError("separation_engine must be one of: " + ", ".join(_ENGINE_CHOICES))
+    if choice == "roformer-sw":
+        reason = roformer_unavailable_reason()
+        if reason == "intel-mac":
+            raise ValueError("BS-Roformer-SW is not available on Intel Macs")
+        if reason is not None:
+            raise ValueError("BS-Roformer-SW is not installed on this machine")
+        if not (accept or roformer_sw_accepted()):
+            raise ValueError("BS-Roformer-SW needs your confirmation first")
+    with _LOCK:
+        state = _ensure()
+        state["separation_engine"] = choice
+        if choice == "roformer-sw":
+            state["roformer_sw_accepted"] = True
+        _save()
+        return choice
+
+
+def record_roformer_outcome(failure: str | None) -> None:
+    """Remember why the last BS-Roformer-SW attempt fell back to Demucs (None clears it), so
+    Settings can show it. Best effort: a settings write problem never fails a job."""
+    with _LOCK:
+        state = _ensure()
+        if state.get("roformer_last_failure") == failure:
+            return
+        if failure is None:
+            state.pop("roformer_last_failure", None)
+        else:
+            state["roformer_last_failure"] = failure
+        _save()
+
+
+def roformer_last_failure() -> str | None:
+    with _LOCK:
+        v = _ensure().get("roformer_last_failure")
+        return v if isinstance(v, str) and v else None
+
+
 def lyrics_mending_enabled() -> bool:
     """Whether found lyrics that lost their accents may be mended from the
     vocals (transcribe.mend_lyrics), on any device unless the setting is "off".

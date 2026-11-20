@@ -14,7 +14,13 @@ from pathlib import Path
 from app.core.config import DEMUCS_MODEL, PREWARM_WORKER, SEPARATION_ENGINE, TIMEOUT_DEMUCS_STALL
 from app.core.models import Job, JobCancelled, _set
 from app.core.registry import set_proc
-from app.core.settings import get_demucs_device, get_separation_quality
+from app.core.settings import (
+    get_demucs_device,
+    get_separation_engine,
+    get_separation_quality,
+    record_roformer_outcome,
+    separation_engine_from_settings,
+)
 from app.pipeline.errors import SeparationError, classify_failure
 
 logger = logging.getLogger("stemdeck.pipeline")
@@ -144,7 +150,7 @@ def prewarm(device: str | None = None) -> None:
     Best-effort by design: a spawn problem here is not this stage's to
     report. The real dispatch owns error handling (and the CPU fallback),
     and it will hit the same problem with a job to attach it to."""
-    if not PREWARM_WORKER or SEPARATION_ENGINE != "demucs":
+    if not PREWARM_WORKER or _chosen_engine()[0] != "demucs":
         return
     try:
         _get_worker(device or get_demucs_device())
@@ -294,6 +300,30 @@ def _run_demucs(job: Job, source: Path, job_dir: Path, device: str) -> tuple[int
     return (0, tail) if job_ok else (1, tail)
 
 
+def _chosen_engine() -> tuple[str, bool]:
+    """(engine, picked_in_settings). A value saved in Settings wins over the environment;
+    only a Settings pick gets the Demucs fallback below, so the env-var engine keeps its
+    original behaviour of failing the job when it fails."""
+    if separation_engine_from_settings():
+        return get_separation_engine(), True
+    return SEPARATION_ENGINE, False
+
+
+def _use_demucs_instead(job: Job, reason: str) -> None:
+    logger.warning(
+        "[%s] BS-Roformer-SW did not run (%s); using demucs for this job", job.id, reason
+    )
+    job.separation_engine = "demucs"
+    job.engine_fallback = reason
+    record_roformer_outcome(reason)
+    _set(job, progress=0.0, stage="BS-Roformer-SW failed, using Demucs instead...")
+
+
+def _roformer_failure_reason(e: Exception) -> str:
+    text = str(e).strip().splitlines()[0] if str(e).strip() else type(e).__name__
+    return text[:300]
+
+
 def separate(job: Job, source: Path, job_dir: Path) -> Path:
     """Run demucs on the configured device, falling back to CPU once when a
     GPU attempt fails (#276).
@@ -311,14 +341,30 @@ def separate(job: Job, source: Path, job_dir: Path) -> Path:
     # the completion summary / metadata / failure quarantine.
     device = get_demucs_device()
     job.compute_device = device
-    logger.info("[%s] separating on device=%s engine=%s", job.id, device, SEPARATION_ENGINE)
+    engine, from_settings = _chosen_engine()
+    logger.info("[%s] separating on device=%s engine=%s", job.id, device, engine)
+    job.separation_engine = engine
 
-    if SEPARATION_ENGINE == "roformer-sw":
-        # Opt-in engine. No CPU retry and no demucs fallback: a failure here is
-        # a BS-Roformer-SW failure and is reported as one (see roformer.py).
+    if engine == "roformer-sw":
+        # Opt-in engine. No CPU retry. When it was picked in Settings, a failure (a failed
+        # model download included) falls back to Demucs for this job, and says so on the job
+        # (engine_fallback), in the stage line and in the log. When the environment picked it,
+        # a failure is a BS-Roformer-SW failure and fails the job (see roformer.py).
+        from app.core.config import ROFORMER_SW_MODEL, roformer_unavailable_reason
         from app.pipeline.roformer import separate_roformer
 
-        return separate_roformer(job, source, job_dir, device)
+        if from_settings and roformer_unavailable_reason() is not None:
+            reason = f"{ROFORMER_SW_MODEL} is not available on this machine"
+            _use_demucs_instead(job, reason)
+        else:
+            try:
+                stems = separate_roformer(job, source, job_dir, device)
+                record_roformer_outcome(None)
+                return stems
+            except SeparationError as e:
+                if not from_settings:
+                    raise
+                _use_demucs_instead(job, _roformer_failure_reason(e))
 
     rc, tail = _run_demucs(job, source, job_dir, device)
 

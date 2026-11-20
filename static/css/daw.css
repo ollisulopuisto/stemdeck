@@ -5779,3 +5779,28 @@ input, textarea { font-family: inherit; }
 .wn-empty { color: var(--muted); }
 .wn-done { width: 100%; justify-content: center; }
 .about-whats-new { width: 100%; margin-bottom: 16px; border: 1px solid var(--border); cursor: pointer; }
+
+/* Separation engine row (Settings > Processing). */
+.engine-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.engine-card {
+  display: flex; flex-direction: column; gap: 4px; text-align: left; cursor: pointer;
+  padding: 10px 12px; border-radius: 8px; font-family: var(--font-mono);
+  border: 1px solid var(--border); background: rgba(21,31,39,0.52); color: var(--fg-2);
+}
+.engine-card:hover:not(:disabled) { border-color: var(--border-strong); }
+.engine-card.selected { border-color: var(--accent); background: rgba(232,168,56,0.12); color: var(--fg); }
+.engine-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.engine-card.disabled, .engine-card:disabled { opacity: 0.45; cursor: not-allowed; }
+.engine-card-name { font-size: 12px; font-weight: 700; color: var(--fg); }
+.engine-card-desc { font-size: 11px; line-height: 1.45; color: var(--muted); }
+.engine-state { margin-top: 8px; font-size: 11.5px; color: var(--fg-2); }
+.engine-state[data-state="failed"] { color: var(--danger); }
+.engine-state[data-state="downloading"] { color: var(--accent); }
+.engine-confirm { border-color: rgba(232,168,56,0.45); }
+.engine-confirm-title { color: var(--fg); }
+.engine-confirm-go {
+  min-height: 30px; border-radius: 7px; padding: 0 12px; cursor: pointer;
+  font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+  border: 1px solid rgba(232,168,56,0.45); background: rgba(232,168,56,0.16); color: var(--accent);
+}
+@media (max-width: 560px) { .engine-cards { grid-template-columns: 1fr; } }

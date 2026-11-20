@@ -313,6 +313,11 @@ class Job:
     # CPU fallback (#276) -- kept loud in state/metadata so the fallback is
     # never silent (the #247 lesson).
     gpu_fallback: bool = False
+    # Which engine made the stems: "demucs" or "roformer-sw". engine_fallback is set (to the
+    # first line of why) when BS-Roformer-SW was chosen in Settings, failed, and Demucs made
+    # the stems instead -- kept loud like gpu_fallback, never silent.
+    separation_engine: str | None = None
+    engine_fallback: str | None = None
     # Wall-clock seconds per pipeline stage ({"download": 12.3, ...}); written
     # to metadata.json and the one-line completion summary in the log.
     stage_timings: dict[str, float] | None = None
@@ -404,6 +409,8 @@ class Job:
             "error_detail": self.error_detail,
             "compute_device": self.compute_device,
             "gpu_fallback": self.gpu_fallback,
+            "separation_engine": self.separation_engine,
+            "engine_fallback": self.engine_fallback,
             "stage_timings": self.stage_timings,
             "vocal_split": self.vocal_split,
             "trashed_at": self.trashed_at,

@@ -316,6 +316,41 @@ ROFORMER_SW_NOTICE = (
 )
 
 
+# Approximate size of BS-Roformer-SW.ckpt (docs/models.md says about 700 MB). Only used to
+# show download progress; the real size is whatever audio-separator fetches.
+ROFORMER_SW_APPROX_BYTES = 700 * 1024 * 1024
+# Written after the first successful BS-Roformer-SW separation, so the UI can say the
+# model is on disk without trusting a possibly truncated .ckpt.
+ROFORMER_SW_READY_MARKER = "roformer-sw.ready"
+
+
+def roformer_unavailable_reason() -> str | None:
+    """Why BS-Roformer-SW cannot run on this machine, or None when it can.
+
+    Intel Macs keep the old torch pin and get no audio-separator (docs/models.md), so the
+    engine is not there at all. A machine without the package says so too."""
+    import importlib.util
+    import platform
+
+    if sys.platform == "darwin" and platform.machine() == "x86_64":
+        return "intel-mac"
+    if importlib.util.find_spec("audio_separator") is None:
+        return "not-installed"
+    return None
+
+
+def roformer_model_ready() -> bool:
+    return (MODELS_DIR / "audio-separator" / ROFORMER_SW_READY_MARKER).is_file()
+
+
+def roformer_model_bytes() -> int:
+    """Bytes of the checkpoint on disk so far (a partial download counts)."""
+    try:
+        return (MODELS_DIR / "audio-separator" / ROFORMER_SW_MODEL).stat().st_size
+    except OSError:
+        return 0
+
+
 def active_separation_model() -> str:
     """The model that actually separates jobs, for logs/health/failure files."""
     return ROFORMER_SW_MODEL if SEPARATION_ENGINE == "roformer-sw" else DEMUCS_MODEL

@@ -362,6 +362,8 @@ def _write_metadata(job: Job, job_dir: Path) -> None:
         "video_status": job.video_status,
         "compute_device": job.compute_device,
         "gpu_fallback": job.gpu_fallback,
+        "separation_engine": job.separation_engine,
+        "engine_fallback": job.engine_fallback,
         "stage_timings": job.stage_timings,
     }
     try:
