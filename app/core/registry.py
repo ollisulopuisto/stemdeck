@@ -9,6 +9,7 @@ import time
 import uuid
 from pathlib import Path
 
+from app.core.atomic_json import write_json_atomic
 from app.core.config import DEMUCS_MODEL, EXTRA_STEM_NAMES, JOB_ID_RE, LYRICS_FILE, STEM_NAMES
 from app.core.models import Job, clean_artist, clean_audio_tags, clean_identity, clean_work
 
@@ -399,7 +400,7 @@ def _recover_done_job(job_dir: Path) -> Job | None:
         # path -- self-healing, not a permanent special case.
         meta = {"title": f"Recovered track {job_dir.name[:6]}"}
         try:
-            meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+            write_json_atomic(meta_path, meta)
         except OSError:
             logger.warning("could not write recovery metadata for %s", job_dir.name, exc_info=True)
     return Job(
