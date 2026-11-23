@@ -21,6 +21,7 @@ test(`${mode}: restores existing controls paused, then saves real edits and isol
   await page.locator(`.cat-item[data-id="${JOB_ID}"]`).first().dblclick();
   await expect.poll(async()=> (await read(page)).position).toBeCloseTo(2,1);
   expect(await read(page)).toMatchObject({start:1,end:4,enabled:false,zoom:2,speed:1,playing:false});
+  await expect(page.locator('#waveLoadingOverlay')).toHaveClass(/hidden/);
   await page.screenshot({path:`/downloads/stemdeck-workspace-restored-${mode}.png`,fullPage:true});
   await page.locator(`.cat-item[data-id="${SIBLING_JOB_ID}"]`).first().dblclick();
   await expect.poll(async()=>page.evaluate(async()=> (await import('/js/state.js')).currentJobId)).toBe(SIBLING_JOB_ID);
