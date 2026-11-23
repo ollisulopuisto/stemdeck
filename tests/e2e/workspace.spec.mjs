@@ -7,7 +7,7 @@ const read = page => page.evaluate(async () => {
 });
 for (const mode of ['chunked', 'streaming']) {
 const saved = {loopEnabled:true,loopStart:1,loopEnd:4,zoom:2,position:2,speed:.65};
-test(`${mode}: restores existing controls paused, then saves real edits and isolates another song`, async ({page}) => {
+test(`${mode}: restores existing controls paused, then saves real edits and isolates another song`, async ({page}, testInfo) => {
   await page.addInitScript(([id,value])=>{if(!localStorage.getItem(`stemdeck:workspace:${id}`))localStorage.setItem(`stemdeck:workspace:${id}`,JSON.stringify(value));},[JOB_ID,saved]);
   if(mode==='streaming') await page.addInitScript(()=>localStorage.setItem('stemdeck.audioEngine','0'));
   await openStudio(page);
@@ -22,7 +22,7 @@ test(`${mode}: restores existing controls paused, then saves real edits and isol
   await expect.poll(async()=> (await read(page)).position).toBeCloseTo(2,1);
   expect(await read(page)).toMatchObject({start:1,end:4,enabled:false,zoom:2,speed:1,playing:false});
   await expect(page.locator('#waveLoadingOverlay')).toHaveClass(/hidden/);
-  await page.screenshot({path:`/downloads/stemdeck-workspace-restored-${mode}.png`,fullPage:true});
+  await page.screenshot({path:testInfo.outputPath(`workspace-restored-${mode}.png`),fullPage:true});
   await page.locator(`.cat-item[data-id="${SIBLING_JOB_ID}"]`).first().dblclick();
   await expect.poll(async()=>page.evaluate(async()=> (await import('/js/state.js')).currentJobId)).toBe(SIBLING_JOB_ID);
   await expect.poll(async()=> (await read(page)).zoom).toBe(1);
