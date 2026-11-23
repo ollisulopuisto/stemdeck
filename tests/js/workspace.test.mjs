@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';
+import { normalizeWorkspace, createWorkspaceSession } from '../../static/js/workspace.js';
+const raw = { loopEnabled: true, loopStart: 2, loopEnd: 4, zoom: 3, position: 3, speed: .65 };
+assert.deepEqual(normalizeWorkspace(raw, 6), raw);
+assert.deepEqual(normalizeWorkspace({loopEnabled:true, loopStart:Infinity, loopEnd:-2, zoom:NaN, position:99, speed:8},6),
+ {loopEnabled:false,loopStart:0,loopEnd:0,zoom:1,position:6,speed:1});
+assert.equal(normalizeWorkspace({...raw,loopEnd:99},3).loopEnd,3);
+assert.equal(normalizeWorkspace({...raw,loopStart:4,loopEnd:2},6).loopEnabled,false);
+const pending = [], writes = [], applied = [];
+const session = createWorkspaceSession({read: k => new Promise(resolve => pending.push({k,resolve})), write: async(k,v)=>writes.push([k,v])});
+let a = session.open('a', 6), b = session.open('b', 6);
+pending[0].resolve(raw); await a.restore(v=>applied.push(v));
+assert.equal(applied.length,0,'stale A must not apply to B');
+pending[1].resolve(raw); await b.restore(v=>applied.push(v));
+assert.equal(applied.length,1);
+b.save({...raw,position:2}); b.save({...raw,position:2}); await session.flush();
+assert.equal(writes.length,1,'unchanged checkpoints must not write');
+a.save(raw); await session.flush(); assert.equal(writes.length,1,'stale handles cannot save');
+a = session.open('a',6); a.touch(); pending[2].resolve(raw); await a.restore(v=>applied.push(v));
+assert.equal(applied.length,1,'user edits during load win');
+a.save({...raw,position:1}); await session.flush(); assert.equal(writes[1][0],'stemdeck:workspace:a');
+b=session.open('b',6); session.close(); pending[3].resolve(raw); await b.restore(v=>applied.push(v));
+assert.equal(applied.length,1,'destroyed/deleted tracks cannot restore');
+console.log('workspace validation, isolation, interaction, teardown, write coalescing: pass');

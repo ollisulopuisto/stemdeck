@@ -143,8 +143,12 @@ packaging decision, not a technical one. This is not urgent and it is not
 optional.
 
 **Save and restore a workspace.** [#425](https://github.com/stemdeckapp/stemdeck/issues/425).
-Volume, mute and solo persist per song. Loop region, zoom, playhead, speed and
-click settings do not, so a reloaded track does not come back as it was left.
+Volume, mute and solo persist per song. Workspace restore now also keeps loop
+region, waveform zoom, paused playhead and active speed per song in the same
+local store. Checkpoints run after interactions, every five seconds and on track
+changes; abrupt process termination may lose the latest checkpoint. Click
+settings already persist globally and retain that behavior. No auto-play or
+cross-device sync.
 
 **Pitch and key transposition.** [#245](https://github.com/stemdeckapp/stemdeck/issues/245).
 Requested for vocal practice and karaoke.
