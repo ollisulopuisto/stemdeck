@@ -1006,9 +1006,12 @@ function paintSlowButton() {
  * pressed is the one lit, so half speed and a slow speed set to 0.50x never
  * light together.
  */
-function applySpeed(rate, btn = null) {
+let speedRevision = 0;
+function applySpeed(rate, btn = null, restoredRate = null) {
+  speedRevision += 1;
+  paintSlowButton();
   const pressed = btn ?? (rate >= 1 ? normalBtn() : slowBtn());
-  const applied = pressed === halfBtn() ? 0.5 : pressed === slowBtn() ? _slowRate : 1;
+  const applied = restoredRate ?? (pressed === halfBtn() ? 0.5 : pressed === slowBtn() ? _slowRate : 1);
   setPlaybackSpeed(applied);
   for (const b of speedBtns) {
     if (!b) continue;
@@ -1128,7 +1131,21 @@ function wirePitchControl() {
   pitchResetBtn?.addEventListener("click", () => resetAllKeys());
 }
 
+// Restore the active rate without replacing the user's global slow preset.
+export function restoreWorkspaceSpeed(rate) {
+  clearTimeout(_slowApplyTimer);
+  if (rate === 1) applySpeed(1, normalBtn());
+  else if (rate === .5) applySpeed(.5, halfBtn());
+  else {
+    applySpeed(rate, slowBtn(), rate);
+    // The active button must describe the rate actually being heard. Its
+    // dataset remains the global preset used on the next explicit click.
+    if (slowBtn()) slowBtn().textContent = `${rate.toFixed(2)}x`;
+  }
+}
+
 export function resetSpeed() {
+  clearTimeout(_slowApplyTimer);
   applySpeed(1.0);
 }
 
@@ -1149,12 +1166,15 @@ function wireSpeedControl() {
     e.preventDefault();
     nudgeSlowSpeed(e.key === "ArrowUp" ? 1 : -1);
   });
+  const loadingSpeedRevision = speedRevision;
   storeGet(_SLOW_SPEED_KEY, null).then((saved) => {
     if (typeof saved !== "number" || !Number.isFinite(saved)) return;
     const wasSlow = slow.classList.contains("active");
     _slowRate = clampSlow(saved);
-    paintSlowButton();
-    if (wasSlow) applySpeed(_slowRate, slow);
+    if (speedRevision === loadingSpeedRevision) {
+      paintSlowButton();
+      if (wasSlow) applySpeed(_slowRate, slow);
+    }
   }).catch(() => {});
 }
 

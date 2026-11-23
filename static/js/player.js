@@ -1,5 +1,5 @@
 import Multitrack from "/vendor/multitrack.js";
-import { fmtTime } from "./utils.js";
+import { fmtTime, storeGet, storeSet } from "./utils.js";
 // job.js imports this module in turn. The cycle is pre-existing (catalog.js does
 // the same) and safe: these are only ever called from a callback, long after both
 // module bodies have run, and they close over DOM handles from dom.js rather than
@@ -20,7 +20,7 @@ import {
   audioEngine, setAudioEngine,
   setMultitrack, setCurrentJobId, setTrackIndex, setTotalDuration,
   setLoopEnabled, setLoopStart, setLoopEnd, setMasterVolume,
-  waveScroll, selectedStems,
+  waveScroll, waveZoom, playbackSpeed, selectedStems,
   footerTitle, footerMeta, footerThumb,
   setFooterWaveDrawFn, setOverviewRerenderFn, autoSectionsResetFn,
   metronome, setMetronome, metronomeEnabled, metronomeVolume, metronomeBeatsPerBar,
@@ -48,12 +48,49 @@ import {
   applyWaveZoom, resetWaveZoom, WAVE_ZOOM_MAX,
   buildPresenceRuler, buildFooterWaveTicks, updateFooterTimes,
   updatePresencePlayhead, resetSpeed, resetPitch, updatePitchAvailability,
-  updateMetronomeAvailability, applyMetronomeAccent,
+  updateMetronomeAvailability, applyMetronomeAccent, restoreWorkspaceSpeed, setWaveZoomLevel,
 } from "./transport.js";
 import { stopVuLoop } from "./audio.js";
 import { destroySections } from "./sections.js";
 import { t, plural, onLanguageChange } from "./i18n.js";
 import { paintNowPlayingArt } from "./formatIcon.js";
+
+import { createWorkspaceSession } from "./workspace.js";
+
+const workspaceSessions = createWorkspaceSession({read: storeGet, write: storeSet});
+let workspaceCheckpoint = null;
+let workspaceCleanup = null;
+
+function stopWorkspace() {
+  workspaceCheckpoint?.();
+  workspaceCleanup?.();
+  workspaceCheckpoint = workspaceCleanup = null;
+  workspaceSessions.close();
+}
+
+function watchWorkspace(handle) {
+  const controller = new AbortController();
+  const options = { signal: controller.signal, capture: true };
+  let timer;
+  const checkpoint = () => {
+    const src = audioEngine ?? multitrack;
+    if (!src) return;
+    handle.save({loopEnabled, loopStart, loopEnd, zoom: waveZoom,
+      position: Math.round((src.getCurrentTime?.() ?? 0) * 10) / 10,
+      speed: playbackSpeed});
+  };
+  const edited = () => {
+    handle.touch();
+    clearTimeout(timer);
+    timer = setTimeout(checkpoint, 400);
+  };
+  for (const event of ["pointerdown", "input", "change", "keydown", "wheel"])
+    document.addEventListener(event, edited, options);
+  window.addEventListener("pagehide", checkpoint, {signal: controller.signal});
+  const interval = setInterval(checkpoint, 5000);
+  workspaceCheckpoint = checkpoint;
+  workspaceCleanup = () => { controller.abort(); clearTimeout(timer); clearInterval(interval); };
+}
 
 // Playback-engine selection. All engines play decoded AudioBuffers off a single
 // AudioContext clock (no N streaming <audio> elements — that was the source of
@@ -830,6 +867,7 @@ function hideNowPlayingArtist() {
 }
 
 export function destroyPlayer() {
+  stopWorkspace();
   document.querySelector(".app")?.classList.remove("is-import");
   document.querySelector(".app")?.classList.remove("engine-waveforms");
   document.querySelector(".app")?.classList.add("no-track");
@@ -1079,6 +1117,8 @@ function _applyLaneHeight(count) {
 }
 
 export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, title = "", peaksPromise = null, hasVideo = false, videoStatus = null) {
+  stopWorkspace();
+  resetSpeed();
   const rawStems = stems.filter((stem) => stem?.name && stem?.url);
   const app = document.querySelector(".app");
   app?.classList.remove("is-import");
@@ -1107,6 +1147,8 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
   }, 60000);
   setCurrentJobId(jobId);
   setTotalDuration(duration || 0);
+  const workspace = workspaceSessions.open(jobId, duration || 0);
+  watchWorkspace(workspace);
   refreshMixerVisuals();
   const mixReady = loadMixIntoState(jobId, stems.map((s) => s.name))
     .then(() => { if (currentJobId === jobId) refreshMixerVisuals(); })
@@ -1342,7 +1384,24 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
     stopBtn.classList.toggle("stopped", stopped);
   };
 
+  const restoreWorkspace = (src) => workspace.restore((saved) => {
+    if (token !== visualRenderToken || multitrack !== mt) return;
+    setLoopStart(saved.loopStart);
+    setLoopEnd(saved.loopEnd);
+    setLoopEnabled(saved.loopEnabled);
+    loopBtn.classList.toggle("active", saved.loopEnabled);
+    updateLoopRegionVisual();
+    src.setLoop?.(saved.loopEnabled, saved.loopStart, saved.loopEnd);
+    setWaveZoomLevel(Math.min(WAVE_ZOOM_MAX, saved.zoom));
+    restoreWorkspaceSpeed(saved.speed);
+    src.setTime(saved.position);
+    updatePlayheadMarker(saved.position);
+    updateFooterTimes(saved.position);
+    updatePresencePlayhead(saved.position);
+  });
+
   mt.once("canplay", () => {
+    if (token !== visualRenderToken || multitrack !== mt) return;
     setWaveformLoading(false);
     const ctx = mt.audioContext;
     console.debug(
@@ -1420,6 +1479,7 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
       });
     }
 
+    if (!useEngine) restoreWorkspace(mt);
     const ws = wsArr?.[0];
     if (!ws) return;
 
@@ -1473,7 +1533,7 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
       // "fulldecode" when peaks.json is missing (legacy jobs), because the
       // backend's documented degradation for missing peaks is client-side
       // decode — which only the full-decode engine can provide.
-      const startEngine = (kind) => {
+      const startEngine = (kind, resumePosition = null) => {
         updatePitchAvailability(false);
         setLaneKeysAvailable(false);
         // Retract a previous track's playback failure. Without this the box
@@ -1522,6 +1582,9 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
           // "playback failed" notification if one was sitting there (#401).
           resolvePlaybackSuccess(jobId);
           eng.setLoop(loopEnabled, loopStart, loopEnd);
+          eng.setPlaybackRate?.(playbackSpeed);
+          restoreWorkspace(eng);
+          if (resumePosition !== null) eng.setTime(resumePosition);
           updatePitchAvailability(eng.supportsPitchShift?.() === true);
           applyMix(); // push per-stem gains (incl. >1.0 boost) into the engine
           // Lane keys ride on the same engine, so they are restored from the
@@ -1586,9 +1649,10 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
                 if (estimateDecodedBytes(totalDuration, engineStemCount) <= MAX_ENGINE_DECODED_BYTES) {
                   console.warn("[player] no peaks.json; using full-decode engine for visuals");
                   teardownMetronome();
+                  const resumePosition = eng.getCurrentTime();
                   eng.destroy();
                   if (audioEngine === eng) setAudioEngine(null);
-                  startEngine("fulldecode");
+                  startEngine("fulldecode", resumePosition);
                 } else {
                   console.warn("[player] no peaks.json and track too large to decode; waveforms unavailable");
                 }
