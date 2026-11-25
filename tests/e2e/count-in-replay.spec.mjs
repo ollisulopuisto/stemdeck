@@ -43,7 +43,11 @@ async function setUp(page, { click }) {
 }
 
 const countIns = (page) => page.evaluate(() => window.__countIns);
-const play = (page) => page.keyboard.press("Space");
+const play = async (page) => {
+  // Transport keys intentionally do not hijack the select/button last used.
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.keyboard.press("Space");
+};
 
 // Each case plays, does something that ends the first play, and plays again.
 const endings = {
