@@ -64,7 +64,8 @@ check(
 
 check(
   'the keyboard guard excludes textareas',
-  code.includes('HTMLTextAreaElement'),
+  code.includes('matchShortcut(e, "transport")') &&
+    readFileSync(join(root, 'static/js/shortcuts.js'), 'utf8').includes('input, textarea, select'),
   'Space in the log viewer used to start playback instead of scrolling',
 );
 

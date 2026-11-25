@@ -1,3 +1,4 @@
+import { matchShortcut } from "./shortcuts.js";
 // catalog.js — library panel: folders, tracks, collapse, drag-and-drop
 import { STEM_NAMES } from "./constants.js";
 import { wireUpAudio, updateFooterTrack } from "./player.js";
@@ -1786,8 +1787,7 @@ function wireLibraryDeleteKeys() {
   document.body.dataset.libraryDeleteReady = "1";
 
   document.addEventListener("keydown", (e) => {
-    if (e.key !== "Delete" && e.key !== "Backspace") return;
-    if (isTextEditingTarget(e.target)) return;
+    if (matchShortcut(e, "library") !== "trashTrack") return;
     if (!_currentTrackId || !tracks[_currentTrackId]) return;
     e.preventDefault();
     moveTrackToTrash(_currentTrackId);
