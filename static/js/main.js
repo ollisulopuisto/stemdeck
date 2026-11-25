@@ -1,3 +1,4 @@
+import { matchShortcut } from "./shortcuts.js";
 import {
   playBtn, loopBtn, totalDuration, loopEnabled, loopStart, loopEnd,
   setLoopStart, setLoopEnd, selectedStems, saveSelectedStems, stemSelectionReady,
@@ -1040,33 +1041,32 @@ function wireAppShellControls() {
 
 document.addEventListener("keydown", (e) => {
   if (!transport()) return;
-  // Textareas were not excluded, so Space in the log viewer started playback
-  // instead of scrolling.
-  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-  if (e.code === "Space") {
+  const shortcut = matchShortcut(e, "transport");
+  if (!shortcut) return;
+  if (shortcut === "play") {
     e.preventDefault();
     togglePlayPause();
-  } else if (e.code === "BracketLeft") {
+  } else if (shortcut === "seekBack") {
     e.preventDefault();
     // setPlayheadTime clamps to [0, totalDuration] itself, so the Math.max /
     // Math.min the multitrack version needed are gone with it.
     setPlayheadTime(transport().getCurrentTime() - 5);
-  } else if (e.code === "BracketRight") {
+  } else if (shortcut === "seekForward") {
     e.preventDefault();
     setPlayheadTime(transport().getCurrentTime() + 5);
-  } else if (e.code === "KeyL") {
+  } else if (shortcut === "loop") {
     e.preventDefault();
     loopBtn.click();
-  } else if (e.code === "KeyK") {
+  } else if (shortcut === "metronome") {
     e.preventDefault();
     toggleMetronome();
-  } else if (e.code === "KeyI" && loopEnabled) {
+  } else if (shortcut === "loopIn" && loopEnabled) {
     e.preventDefault();
     // multitrack.getCurrentTime() is pinned at 0 on the engine path, so "set
     // loop in at playhead" always wrote 0 regardless of where the playhead was.
     setLoopStart(Math.min(transport().getCurrentTime(), loopEnd - 0.5));
     updateLoopRegionVisual();
-  } else if (e.code === "KeyO" && loopEnabled) {
+  } else if (shortcut === "loopOut" && loopEnabled) {
     e.preventDefault();
     setLoopEnd(Math.max(transport().getCurrentTime(), loopStart + 0.5));
     updateLoopRegionVisual();

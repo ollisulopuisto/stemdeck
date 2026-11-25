@@ -239,6 +239,10 @@ test.describe("click track", () => {
     await ui.grid.click();
     await expect(toolbar).not.toHaveClass(/hidden/);
 
+    // Focused controls own their keys. The app-wide K works after leaving it.
+    await ui.grid.press("k");
+    await expect(ui.toggle).toHaveAttribute("aria-pressed", "true");
+    await page.evaluate(() => document.activeElement?.blur());
     await page.locator("body").press("k");
     await expect(ui.toggle).toHaveAttribute("aria-pressed", "false");
     await expect(toolbar).toHaveClass(/hidden/);

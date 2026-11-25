@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Keep modified transport/library shortcuts with macOS and the host. Bare
+  transport keys now stay out of text fields, controls and dialogs, using one
+  app-wide shortcut registry and guard.
+
+
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
