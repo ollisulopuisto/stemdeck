@@ -1778,10 +1778,6 @@ function wireRailLibraryDrop() {
   });
 }
 
-function isTextEditingTarget(target) {
-  return Boolean(target?.closest?.("input, textarea, select, [contenteditable='true'], .folder-editor"));
-}
-
 function wireLibraryDeleteKeys() {
   if (document.body.dataset.libraryDeleteReady === "1") return;
   document.body.dataset.libraryDeleteReady = "1";
